@@ -56,7 +56,7 @@ Consistent hashing distributes keys across a dynamic number of physical servers 
 #### Virtual Nodes (VNodes)
 To prevent statistical imbalance (skewed load on specific nodes), each physical node is mapped to **150 virtual nodes** (VNodes) distributed randomly on the ring.
 - A VNode's location is determined by:
-  $$\text{Hash} = \text{fnv1a}(\text{NodeID} + \text{"\#"} + \text{strconv.Itoa(VNodeIndex)})$$
+  $$\text{Hash} = \text{fnv1a}(\text{NodeID} + \text{"delimiter"} + \text{strconv.Itoa(VNodeIndex)})$$
 - The ring is implemented as a sorted slice of VNodes. Binary search ($O(\log(\text{nodes} \times 150))$) resolves key lookups by locating the first VNode hash greater than or equal to the key's hash.
 
 #### Google's Bounded Loads Algorithm
@@ -160,7 +160,7 @@ If the frequency estimate of a key exceeds the hot key threshold:
 1. **Splitting Activation**: The server marks the key as mitigated via `KEY_SPLIT` and creates $S$ sharded copies of the key (default `4` shards) named `key:shard_0` through `key:shard_3` in the local store.
 2. **Replication**: The primary writes the original value across all $S$ shards.
 3. **Routing**: On subsequent writes to the hot key, the primary writes to all $S$ shards. On reads, the client SDK hashes its own client ID to route requests to a specific shard:
-  $$\text{Target Key} = \text{key} + \text{":shard\_"} + (\text{hash(ClientID)} \% S)$$
+  $$\text{Target Key} = \text{key} + \text{":shard-i"} + (\text{hash(ClientID)} \% S)$$
   This splits the read load across different shards, distributing the queries.
 
 #### Mitigation Strategy 2: Client L1 LRU Cache
