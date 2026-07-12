@@ -2,12 +2,15 @@ package cluster
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"math/rand"
 	"net"
 	"sync"
 	"time"
+
+	"github.com/AbhinayAmbati/distributed_cache_system/internal/chaos"
 )
 
 const (
@@ -91,11 +94,14 @@ type Membership struct {
 	conn *net.UDPConn
 	addr string
 
+	// Fault injector for chaos engineering simulation.
+	injector *chaos.FaultInjector
+
 	// Pending acks: maps target nodeID → ack channel.
 	pendingAcks map[string]chan struct{}
 
 	// Updates to disseminate (piggybacked on messages).
-	updateQueue []MembershipUpdate
+	updateQueue []*queuedUpdate
 	updateMu    sync.Mutex
 
 	// Suspicion timers: nodeID → timer.
@@ -123,7 +129,7 @@ func NewMembership(selfInfo *NodeInfo, registry *NodeRegistry) *Membership {
 		registry:         registry,
 		incarnation:      0,
 		pendingAcks:      make(map[string]chan struct{}),
-		updateQueue:      make([]MembershipUpdate, 0),
+		updateQueue:      make([]*queuedUpdate, 0),
 		suspicionTimers:  make(map[string]*time.Timer),
 		pingInterval:     DefaultPingInterval,
 		pingTimeout:      DefaultPingTimeout,
@@ -131,6 +137,29 @@ func NewMembership(selfInfo *NodeInfo, registry *NodeRegistry) *Membership {
 		pingReqCount:     DefaultPingReqCount,
 		stopCh:           make(chan struct{}),
 	}
+}
+
+type queuedUpdate struct {
+	update    MembershipUpdate
+	sentCount int
+}
+
+// SetFaultInjector configures the fault injector for simulating network partitions/crashes.
+func (m *Membership) SetFaultInjector(fi *chaos.FaultInjector) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.injector = fi
+}
+
+// isBlocked returns true if node is crashed or partitioned from the peer.
+func (m *Membership) isBlocked(peerID string) bool {
+	m.mu.RLock()
+	inj := m.injector
+	m.mu.RUnlock()
+	if inj == nil {
+		return false
+	}
+	return inj.IsFailed() || inj.IsPartitioned(peerID)
 }
 
 // SetOnEvent sets the callback for membership change events.
@@ -282,11 +311,15 @@ func (m *Membership) receiveLoop() {
 			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
 				continue
 			}
+			if errors.Is(err, net.ErrClosed) {
+				return
+			}
 			select {
 			case <-m.stopCh:
 				return
 			default:
 				log.Printf("[swim] read error: %v", err)
+				time.Sleep(100 * time.Millisecond) // avoid tight loop if some other error persists
 				continue
 			}
 		}
@@ -295,6 +328,10 @@ func (m *Membership) receiveLoop() {
 		if err := json.Unmarshal(buf[:n], &msg); err != nil {
 			log.Printf("[swim] invalid message from %s: %v", remoteAddr, err)
 			continue
+		}
+
+		if m.isBlocked(msg.SenderID) {
+			continue // Drop packet
 		}
 
 		m.handleMessage(msg, remoteAddr)
@@ -466,6 +503,10 @@ func (m *Membership) pingRandomMember() {
 
 // sendPingAndWait sends a ping and waits for an ack within the timeout.
 func (m *Membership) sendPingAndWait(addr string, targetID string) bool {
+	if m.isBlocked(targetID) {
+		return false
+	}
+
 	udpAddr, err := net.ResolveUDPAddr("udp", addr)
 	if err != nil {
 		return false
@@ -540,6 +581,9 @@ func (m *Membership) sendPingReqs(target *NodeInfo) bool {
 
 	// Send ping-req to each proxy.
 	for _, proxy := range proxies {
+		if m.isBlocked(proxy.ID) {
+			continue
+		}
 		udpAddr, err := net.ResolveUDPAddr("udp", proxy.GossipAddr)
 		if err != nil {
 			continue
@@ -664,6 +708,9 @@ func (m *Membership) applyUpdate(update MembershipUpdate) {
 
 			log.Printf("[swim] discovered new node %s at %s", update.NodeID, update.GRPCAddr)
 			m.emitEvent(MembershipEvent{Type: EventJoin, NodeID: update.NodeID})
+
+			// Help disseminate this new node discovery to our peers
+			m.queueUpdate(update)
 		}
 		return
 	}
@@ -765,17 +812,37 @@ func (m *Membership) refute(update MembershipUpdate) {
 func (m *Membership) queueUpdate(update MembershipUpdate) {
 	m.updateMu.Lock()
 	defer m.updateMu.Unlock()
-	m.updateQueue = append(m.updateQueue, update)
+	
+	// Deduplicate/coalesce updates
+	for i, q := range m.updateQueue {
+		if q.update.NodeID == update.NodeID {
+			if update.Incarnation >= q.update.Incarnation {
+				m.updateQueue[i] = &queuedUpdate{update: update, sentCount: 0}
+			}
+			return
+		}
+	}
+	m.updateQueue = append(m.updateQueue, &queuedUpdate{update: update, sentCount: 0})
 }
 
 // queueUpdateLocked adds an update when m.mu is already held.
 func (m *Membership) queueUpdateLocked(update MembershipUpdate) {
 	m.updateMu.Lock()
 	defer m.updateMu.Unlock()
-	m.updateQueue = append(m.updateQueue, update)
+	
+	for i, q := range m.updateQueue {
+		if q.update.NodeID == update.NodeID {
+			if update.Incarnation >= q.update.Incarnation {
+				m.updateQueue[i] = &queuedUpdate{update: update, sentCount: 0}
+			}
+			return
+		}
+	}
+	m.updateQueue = append(m.updateQueue, &queuedUpdate{update: update, sentCount: 0})
 }
 
-// drainUpdates returns and clears up to maxPiggybackUpdates from the queue.
+// drainUpdates returns up to maxPiggybackUpdates from the queue, incrementing their sentCount.
+// Discards them when sentCount >= 3.
 func (m *Membership) drainUpdates() []MembershipUpdate {
 	m.updateMu.Lock()
 	defer m.updateMu.Unlock()
@@ -784,14 +851,19 @@ func (m *Membership) drainUpdates() []MembershipUpdate {
 		return nil
 	}
 
-	n := len(m.updateQueue)
-	if n > maxPiggybackUpdates {
-		n = maxPiggybackUpdates
-	}
+	var updates []MembershipUpdate
+	var active []*queuedUpdate
 
-	updates := make([]MembershipUpdate, n)
-	copy(updates, m.updateQueue[:n])
-	m.updateQueue = m.updateQueue[n:]
+	for _, q := range m.updateQueue {
+		if len(updates) < maxPiggybackUpdates {
+			updates = append(updates, q.update)
+			q.sentCount++
+		}
+		if q.sentCount < 3 {
+			active = append(active, q)
+		}
+	}
+	m.updateQueue = active
 
 	return updates
 }

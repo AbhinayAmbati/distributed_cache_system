@@ -201,6 +201,14 @@ func (rm *ReplicationManager) DisconnectPeer(nodeID string) {
 	}
 }
 
+// GetPeerConn returns the connection to the specified peer if it exists.
+func (rm *ReplicationManager) GetPeerConn(nodeID string) (*grpc.ClientConn, bool) {
+	rm.mu.RLock()
+	defer rm.mu.RUnlock()
+	conn, ok := rm.peerConns[nodeID]
+	return conn, ok
+}
+
 // Events returns the channel of replication events (for monitoring).
 func (rm *ReplicationManager) Events() <-chan ReplicationEvent {
 	return rm.replicationEvents

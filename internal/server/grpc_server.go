@@ -8,6 +8,10 @@ import (
 	"time"
 
 	pb "github.com/AbhinayAmbati/distributed_cache_system/api/proto"
+	"github.com/AbhinayAmbati/distributed_cache_system/internal/chaos"
+	"github.com/AbhinayAmbati/distributed_cache_system/internal/cluster"
+	"github.com/AbhinayAmbati/distributed_cache_system/internal/hashing"
+	"github.com/AbhinayAmbati/distributed_cache_system/internal/hotkey"
 	"github.com/AbhinayAmbati/distributed_cache_system/internal/store"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
@@ -15,18 +19,33 @@ import (
 
 // CacheServer implements the gRPC CacheService.
 type CacheServer struct {
-	nodeID    string
-	store     *store.Store
-	startTime time.Time
-	grpcSrv   *grpc.Server
+	nodeID          string
+	store           *store.Store
+	ring            *hashing.Ring
+	replicationMgr  *cluster.ReplicationManager
+	faultInjector   *chaos.FaultInjector
+	hotKeyMitigator *hotkey.Mitigator
+	startTime       time.Time
+	grpcSrv         *grpc.Server
 }
 
 // NewCacheServer creates a new gRPC cache server.
-func NewCacheServer(nodeID string, s *store.Store) *CacheServer {
+func NewCacheServer(
+	nodeID string,
+	s *store.Store,
+	ring *hashing.Ring,
+	repMgr *cluster.ReplicationManager,
+	fi *chaos.FaultInjector,
+	mitigator *hotkey.Mitigator,
+) *CacheServer {
 	return &CacheServer{
-		nodeID:    nodeID,
-		store:     s,
-		startTime: time.Now(),
+		nodeID:          nodeID,
+		store:           s,
+		ring:            ring,
+		replicationMgr:  repMgr,
+		faultInjector:   fi,
+		hotKeyMitigator: mitigator,
+		startTime:       time.Now(),
 	}
 }
 
@@ -37,9 +56,15 @@ func (cs *CacheServer) Start(addr string) error {
 		return fmt.Errorf("failed to listen on %s: %w", addr, err)
 	}
 
-	cs.grpcSrv = grpc.NewServer(
-		grpc.UnaryInterceptor(cs.loggingInterceptor),
-	)
+	var opts []grpc.ServerOption
+	if cs.faultInjector != nil {
+		opts = append(opts, grpc.ChainUnaryInterceptor(cs.loggingInterceptor, cs.faultInjector.UnaryInterceptor()))
+		opts = append(opts, grpc.StreamInterceptor(cs.faultInjector.StreamInterceptor()))
+	} else {
+		opts = append(opts, grpc.UnaryInterceptor(cs.loggingInterceptor))
+	}
+
+	cs.grpcSrv = grpc.NewServer(opts...)
 
 	// Register our service.
 	RegisterCacheServiceServer(cs.grpcSrv, cs)
@@ -83,6 +108,24 @@ func (cs *CacheServer) loggingInterceptor(
 
 // Get retrieves a value by key.
 func (cs *CacheServer) Get(ctx context.Context, req *pb.GetRequest) (*pb.GetResponse, error) {
+	if cs.ring != nil {
+		cs.ring.IncrementLoad(cs.nodeID)
+		defer cs.ring.DecrementLoad(cs.nodeID)
+	}
+
+	// 1. If not primary/replica, proxy to primary
+	if cs.replicationMgr != nil && !cs.replicationMgr.IsReplica(req.Key) {
+		primary, ok := cs.replicationMgr.GetPrimary(req.Key)
+		if ok && primary != cs.nodeID {
+			conn, exists := cs.replicationMgr.GetPeerConn(primary)
+			if exists {
+				resp := &pb.GetResponse{}
+				err := conn.Invoke(ctx, "/cache.CacheService/Get", req, resp)
+				return resp, err
+			}
+		}
+	}
+
 	value, found := cs.store.Get(req.Key)
 
 	resp := &pb.GetResponse{
@@ -92,7 +135,11 @@ func (cs *CacheServer) Get(ctx context.Context, req *pb.GetRequest) (*pb.GetResp
 
 	if found {
 		resp.Value = value
-		// TODO: Phase 5 — set IsHot based on hot key detection.
+		// Set IsHot based on hot key detection
+		if cs.hotKeyMitigator != nil {
+			isHot := cs.hotKeyMitigator.CheckAndMitigate(req.Key)
+			resp.IsHot = isHot
+		}
 	}
 
 	return resp, nil
@@ -100,32 +147,110 @@ func (cs *CacheServer) Get(ctx context.Context, req *pb.GetRequest) (*pb.GetResp
 
 // Set stores a key-value pair with optional TTL.
 func (cs *CacheServer) Set(ctx context.Context, req *pb.SetRequest) (*pb.SetResponse, error) {
+	if cs.ring != nil {
+		cs.ring.IncrementLoad(cs.nodeID)
+		defer cs.ring.DecrementLoad(cs.nodeID)
+	}
+
+	// 1. If not primary, proxy to primary
+	if cs.replicationMgr != nil && !cs.replicationMgr.IsPrimary(req.Key) {
+		primary, ok := cs.replicationMgr.GetPrimary(req.Key)
+		if ok && primary != cs.nodeID {
+			conn, exists := cs.replicationMgr.GetPeerConn(primary)
+			if exists {
+				resp := &pb.SetResponse{}
+				err := conn.Invoke(ctx, "/cache.CacheService/Set", req, resp)
+				return resp, err
+			}
+		}
+	}
+
+	// 2. Perform write (with key splitting if mitigated)
 	var ttl time.Duration
 	if req.TtlMs > 0 {
 		ttl = time.Duration(req.TtlMs) * time.Millisecond
 	}
 
-	cs.store.Set(req.Key, req.Value, ttl)
+	if cs.hotKeyMitigator != nil && cs.hotKeyMitigator.IsMitigated(req.Key) {
+		cs.hotKeyMitigator.WriteToShards(req.Key, req.Value, ttl)
+	} else {
+		cs.store.Set(req.Key, req.Value, ttl)
+	}
 
-	// TODO: Phase 3 — trigger async replication to secondaries.
+	// 3. Trigger async replication if we are the primary
+	if cs.replicationMgr != nil && cs.replicationMgr.IsPrimary(req.Key) {
+		cs.replicationMgr.ReplicateWrite(req.Key, req.Value, req.TtlMs)
+	}
 
 	return &pb.SetResponse{Success: true}, nil
 }
 
 // Delete removes a key from the cache.
 func (cs *CacheServer) Delete(ctx context.Context, req *pb.DeleteRequest) (*pb.DeleteResponse, error) {
+	if cs.ring != nil {
+		cs.ring.IncrementLoad(cs.nodeID)
+		defer cs.ring.DecrementLoad(cs.nodeID)
+	}
+
+	// 1. If not primary, proxy to primary
+	if cs.replicationMgr != nil && !cs.replicationMgr.IsPrimary(req.Key) {
+		primary, ok := cs.replicationMgr.GetPrimary(req.Key)
+		if ok && primary != cs.nodeID {
+			conn, exists := cs.replicationMgr.GetPeerConn(primary)
+			if exists {
+				resp := &pb.DeleteResponse{}
+				err := conn.Invoke(ctx, "/cache.CacheService/Delete", req, resp)
+				return resp, err
+			}
+		}
+	}
+
+	// 2. Perform delete
 	existed := cs.store.Delete(req.Key)
+
+	// 3. Trigger async replication delete if we are the primary
+	if cs.replicationMgr != nil && cs.replicationMgr.IsPrimary(req.Key) {
+		cs.replicationMgr.ReplicateDelete(req.Key)
+	}
+
 	return &pb.DeleteResponse{Existed: existed}, nil
 }
 
 // Expire updates the TTL on an existing key.
 func (cs *CacheServer) Expire(ctx context.Context, req *pb.ExpireRequest) (*pb.ExpireResponse, error) {
+	if cs.ring != nil {
+		cs.ring.IncrementLoad(cs.nodeID)
+		defer cs.ring.DecrementLoad(cs.nodeID)
+	}
+
+	// 1. If not primary, proxy to primary
+	if cs.replicationMgr != nil && !cs.replicationMgr.IsPrimary(req.Key) {
+		primary, ok := cs.replicationMgr.GetPrimary(req.Key)
+		if ok && primary != cs.nodeID {
+			conn, exists := cs.replicationMgr.GetPeerConn(primary)
+			if exists {
+				resp := &pb.ExpireResponse{}
+				err := conn.Invoke(ctx, "/cache.CacheService/Expire", req, resp)
+				return resp, err
+			}
+		}
+	}
+
 	var ttl time.Duration
 	if req.TtlMs > 0 {
 		ttl = time.Duration(req.TtlMs) * time.Millisecond
 	}
 
 	found := cs.store.Expire(req.Key, ttl)
+
+	// 2. Propagate expiration change if found
+	if found && cs.replicationMgr != nil && cs.replicationMgr.IsPrimary(req.Key) {
+		val, ok := cs.store.Get(req.Key)
+		if ok {
+			cs.replicationMgr.ReplicateWrite(req.Key, val, req.TtlMs)
+		}
+	}
+
 	return &pb.ExpireResponse{Found: found}, nil
 }
 

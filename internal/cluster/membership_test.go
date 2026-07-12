@@ -57,15 +57,16 @@ func TestMembership_TwoNodesDiscover(t *testing.T) {
 		t.Fatalf("failed to join: %v", err)
 	}
 
-	// Wait for discovery.
-	time.Sleep(2 * time.Second)
-
-	// Both should know about each other.
-	if registry1.Size() < 2 {
-		t.Fatalf("node-1 expected 2 nodes, got %d", registry1.Size())
+	// Wait for discovery using retry loop.
+	success := false
+	for start := time.Now(); time.Since(start) < 5*time.Second; time.Sleep(100 * time.Millisecond) {
+		if registry1.Size() >= 2 && registry2.Size() >= 2 {
+			success = true
+			break
+		}
 	}
-	if registry2.Size() < 2 {
-		t.Fatalf("node-2 expected 2 nodes, got %d", registry2.Size())
+	if !success {
+		t.Fatalf("expected both nodes to know each other, node-1 size=%d, node-2 size=%d", registry1.Size(), registry2.Size())
 	}
 }
 
@@ -99,14 +100,26 @@ func TestMembership_ThreeNodesDiscover(t *testing.T) {
 		}
 	}
 
-	// Wait for full convergence.
-	time.Sleep(3 * time.Second)
-
-	for i, reg := range registries {
-		if reg.Size() < 3 {
-			t.Fatalf("node-%d expected 3 nodes, got %d", i+1, reg.Size())
+	// Wait for full convergence using retry loop.
+	success := false
+	for start := time.Now(); time.Since(start) < 5*time.Second; time.Sleep(100 * time.Millisecond) {
+		converged := true
+		for _, reg := range registries {
+			if reg.Size() < 3 {
+				converged = false
+				break
+			}
 		}
-		t.Logf("node-%d knows %d nodes", i+1, reg.Size())
+		if converged {
+			success = true
+			break
+		}
+	}
+	if !success {
+		for i, reg := range registries {
+			t.Logf("node-%d knows %d nodes", i+1, reg.Size())
+		}
+		t.Fatalf("expected all nodes to converge to size 3")
 	}
 }
 

@@ -41,9 +41,9 @@ func (h *HTTPServer) registerRoutes() {
 	// Phase 5: Chaos testing endpoints will be registered here.
 }
 
-// RegisterChaosRoutes allows the chaos package to add routes to this server.
-func (h *HTTPServer) RegisterChaosRoutes(prefix string, handler http.Handler) {
-	h.mux.Handle(prefix, handler)
+// Mux returns the underlying serve mux to allow custom route registration.
+func (h *HTTPServer) Mux() *http.ServeMux {
+	return h.mux
 }
 
 // Start begins listening for HTTP connections.
