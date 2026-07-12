@@ -1,0 +1,27 @@
+# Default configuration for a cache node.
+# Override values as needed per environment.
+
+node_id: "node-1"
+grpc_addr: ":7001"
+http_addr: ":9001"
+gossip_addr: ":8001"
+
+# Seed nodes to join an existing cluster.
+# Leave empty for the first node.
+seed_nodes: []
+
+# Number of replicas per key (including primary).
+replica_count: 3
+
+# Virtual nodes per physical node on the consistent hash ring.
+virtual_nodes: 150
+
+# How often the TTL background sweeper runs.
+sweep_interval: 100ms
+
+# Epsilon for consistent hashing with bounded loads.
+# Max load = (1 + max_load_factor) × average load.
+max_load_factor: 0.25
+
+# Logging level: debug, info, warn, error.
+log_level: info

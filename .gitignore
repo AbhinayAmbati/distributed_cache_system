@@ -1,0 +1,31 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+cachenode
+
+# Test binary
+*.test
+
+# Output
+*.out
+*.prof
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build
+/bin/
+/dist/
+
+# Generated protobuf
+# api/proto/*.pb.go  — we commit these

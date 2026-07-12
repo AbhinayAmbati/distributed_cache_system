@@ -1,0 +1,123 @@
+syntax = "proto3";
+
+package cache;
+
+option go_package = "github.com/AbhinayAmbati/distributed_cache_system/api/proto";
+
+// CacheService defines the gRPC interface for the distributed cache.
+service CacheService {
+  // Get retrieves a value by key.
+  rpc Get(GetRequest) returns (GetResponse);
+
+  // Set stores a key-value pair with optional TTL.
+  rpc Set(SetRequest) returns (SetResponse);
+
+  // Delete removes a key from the cache.
+  rpc Delete(DeleteRequest) returns (DeleteResponse);
+
+  // Expire updates the TTL on an existing key.
+  rpc Expire(ExpireRequest) returns (ExpireResponse);
+
+  // Keys returns all keys in the store (for debugging).
+  rpc Keys(KeysRequest) returns (KeysResponse);
+
+  // Ping checks if the node is alive.
+  rpc Ping(PingRequest) returns (PingResponse);
+
+  // --- Internal RPCs (used for replication, Phase 3) ---
+
+  // Replicate sends a write to a secondary replica.
+  rpc Replicate(ReplicateRequest) returns (ReplicateResponse);
+
+  // TransferKeys streams key-value pairs for bulk transfer.
+  rpc TransferKeys(TransferKeysRequest) returns (stream KeyValuePair);
+}
+
+// --- Client-facing messages ---
+
+message GetRequest {
+  string key = 1;
+}
+
+message GetResponse {
+  string key = 1;
+  bytes value = 2;
+  bool found = 3;
+  int64 ttl_ms = 4;   // Remaining TTL in milliseconds, 0 = no expiry.
+  bool is_hot = 5;     // Hint: this key is detected as hot (for L1 caching).
+}
+
+message SetRequest {
+  string key = 1;
+  bytes value = 2;
+  int64 ttl_ms = 3;   // TTL in milliseconds, 0 = no expiry.
+}
+
+message SetResponse {
+  bool success = 1;
+}
+
+message DeleteRequest {
+  string key = 1;
+}
+
+message DeleteResponse {
+  bool existed = 1;    // True if the key was found and deleted.
+}
+
+message ExpireRequest {
+  string key = 1;
+  int64 ttl_ms = 2;   // New TTL in milliseconds, 0 = remove expiry.
+}
+
+message ExpireResponse {
+  bool found = 1;      // True if the key was found and TTL updated.
+}
+
+message KeysRequest {
+  string pattern = 1;  // Optional glob pattern (reserved for future use).
+}
+
+message KeysResponse {
+  repeated string keys = 1;
+}
+
+message PingRequest {}
+
+message PingResponse {
+  string node_id = 1;
+  int64 uptime_ms = 2;
+  int64 keys_count = 3;
+}
+
+// --- Internal replication messages ---
+
+message ReplicateRequest {
+  string key = 1;
+  bytes value = 2;
+  int64 ttl_ms = 3;
+  uint64 sequence = 4;    // Monotonic sequence number for ordering.
+  string source_node = 5; // Node that originated the write.
+  enum Operation {
+    SET = 0;
+    DELETE = 1;
+  }
+  Operation op = 6;
+}
+
+message ReplicateResponse {
+  bool success = 1;
+}
+
+message TransferKeysRequest {
+  // Request keys that belong to a range on the hash ring.
+  uint64 range_start = 1;
+  uint64 range_end = 2;
+  string requesting_node = 3;
+}
+
+message KeyValuePair {
+  string key = 1;
+  bytes value = 2;
+  int64 ttl_ms = 3;
+}
