@@ -267,7 +267,7 @@ func (rm *ReplicationManager) sendReplicate(nodeID string, req *pb.ReplicateRequ
 	defer cancel()
 
 	resp := &pb.ReplicateResponse{}
-	err := conn.Invoke(ctx, "/cache.CacheService/Replicate", req, resp)
+	err := conn.Invoke(ctx, "/cache.CacheService/Replicate", req, resp, grpc.CallContentSubtype("json"))
 	if err != nil {
 		log.Printf("[replication] failed to replicate key %s to %s: %v",
 			req.Key, nodeID, err)

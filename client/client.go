@@ -138,7 +138,7 @@ func (c *Client) Get(ctx context.Context, key string) ([]byte, bool, error) {
 	defer cancel()
 
 	resp := &pb.GetResponse{}
-	err = conn.Invoke(ctx, "/cache.CacheService/Get", &pb.GetRequest{Key: key}, resp)
+	err = conn.Invoke(ctx, "/cache.CacheService/Get", &pb.GetRequest{Key: key}, resp, grpc.CallContentSubtype("json"))
 	if err != nil {
 		return nil, false, fmt.Errorf("get %q: %w", key, err)
 	}
@@ -173,7 +173,7 @@ func (c *Client) Set(ctx context.Context, key string, value []byte, ttl time.Dur
 		Key:   key,
 		Value: value,
 		TtlMs: ttl.Milliseconds(),
-	}, resp)
+	}, resp, grpc.CallContentSubtype("json"))
 	if err != nil {
 		return fmt.Errorf("set %q: %w", key, err)
 	}
@@ -197,7 +197,7 @@ func (c *Client) Delete(ctx context.Context, key string) (bool, error) {
 	defer cancel()
 
 	resp := &pb.DeleteResponse{}
-	err = conn.Invoke(ctx, "/cache.CacheService/Delete", &pb.DeleteRequest{Key: key}, resp)
+	err = conn.Invoke(ctx, "/cache.CacheService/Delete", &pb.DeleteRequest{Key: key}, resp, grpc.CallContentSubtype("json"))
 	if err != nil {
 		return false, fmt.Errorf("delete %q: %w", key, err)
 	}
@@ -219,7 +219,7 @@ func (c *Client) Ping(ctx context.Context, nodeID string) (*pb.PingResponse, err
 	defer cancel()
 
 	resp := &pb.PingResponse{}
-	err := conn.Invoke(ctx, "/cache.CacheService/Ping", &pb.PingRequest{}, resp)
+	err := conn.Invoke(ctx, "/cache.CacheService/Ping", &pb.PingRequest{}, resp, grpc.CallContentSubtype("json"))
 	if err != nil {
 		return nil, fmt.Errorf("ping %s: %w", nodeID, err)
 	}

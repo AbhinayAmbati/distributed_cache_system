@@ -120,7 +120,7 @@ func (cs *CacheServer) Get(ctx context.Context, req *pb.GetRequest) (*pb.GetResp
 			conn, exists := cs.replicationMgr.GetPeerConn(primary)
 			if exists {
 				resp := &pb.GetResponse{}
-				err := conn.Invoke(ctx, "/cache.CacheService/Get", req, resp)
+				err := conn.Invoke(ctx, "/cache.CacheService/Get", req, resp, grpc.CallContentSubtype("json"))
 				return resp, err
 			}
 		}
@@ -159,7 +159,7 @@ func (cs *CacheServer) Set(ctx context.Context, req *pb.SetRequest) (*pb.SetResp
 			conn, exists := cs.replicationMgr.GetPeerConn(primary)
 			if exists {
 				resp := &pb.SetResponse{}
-				err := conn.Invoke(ctx, "/cache.CacheService/Set", req, resp)
+				err := conn.Invoke(ctx, "/cache.CacheService/Set", req, resp, grpc.CallContentSubtype("json"))
 				return resp, err
 			}
 		}
@@ -199,7 +199,7 @@ func (cs *CacheServer) Delete(ctx context.Context, req *pb.DeleteRequest) (*pb.D
 			conn, exists := cs.replicationMgr.GetPeerConn(primary)
 			if exists {
 				resp := &pb.DeleteResponse{}
-				err := conn.Invoke(ctx, "/cache.CacheService/Delete", req, resp)
+				err := conn.Invoke(ctx, "/cache.CacheService/Delete", req, resp, grpc.CallContentSubtype("json"))
 				return resp, err
 			}
 		}
@@ -230,7 +230,7 @@ func (cs *CacheServer) Expire(ctx context.Context, req *pb.ExpireRequest) (*pb.E
 			conn, exists := cs.replicationMgr.GetPeerConn(primary)
 			if exists {
 				resp := &pb.ExpireResponse{}
-				err := conn.Invoke(ctx, "/cache.CacheService/Expire", req, resp)
+				err := conn.Invoke(ctx, "/cache.CacheService/Expire", req, resp, grpc.CallContentSubtype("json"))
 				return resp, err
 			}
 		}
