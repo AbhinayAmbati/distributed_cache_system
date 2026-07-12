@@ -21,6 +21,9 @@ type Client struct {
 	conns map[string]*grpc.ClientConn // nodeID → connection
 	addrs map[string]string           // nodeID → grpc address
 
+	// L1 client-side cache for hot keys
+	l1Cache *L1Cache
+
 	// Options.
 	dialTimeout    time.Duration
 	requestTimeout time.Duration
@@ -40,6 +43,13 @@ func WithDialTimeout(d time.Duration) Option {
 func WithRequestTimeout(d time.Duration) Option {
 	return func(c *Client) {
 		c.requestTimeout = d
+	}
+}
+
+// WithL1Cache enables the client-side L1 cache for hot keys.
+func WithL1Cache(capacity int, defaultTTL time.Duration) Option {
+	return func(c *Client) {
+		c.l1Cache = NewL1Cache(capacity, defaultTTL)
 	}
 }
 
@@ -112,6 +122,13 @@ func (c *Client) getConn(key string) (*grpc.ClientConn, string, error) {
 
 // Get retrieves a value by key from the appropriate cache node.
 func (c *Client) Get(ctx context.Context, key string) ([]byte, bool, error) {
+	// 1. Check L1 cache first if enabled
+	if c.l1Cache != nil {
+		if val, ok := c.l1Cache.Get(key); ok {
+			return val, true, nil
+		}
+	}
+
 	conn, _, err := c.getConn(key)
 	if err != nil {
 		return nil, false, err
@@ -126,11 +143,23 @@ func (c *Client) Get(ctx context.Context, key string) ([]byte, bool, error) {
 		return nil, false, fmt.Errorf("get %q: %w", key, err)
 	}
 
+	// 2. If it's a hot key and L1 cache is enabled, store in L1
+	if resp.Found && resp.IsHot && c.l1Cache != nil {
+		// Use remaining TTL from response, or fallback to default
+		ttl := time.Duration(resp.TtlMs) * time.Millisecond
+		c.l1Cache.Set(key, resp.Value, ttl)
+	}
+
 	return resp.Value, resp.Found, nil
 }
 
 // Set stores a key-value pair with optional TTL (0 = no expiry).
 func (c *Client) Set(ctx context.Context, key string, value []byte, ttl time.Duration) error {
+	// Invalidate L1 cache to maintain consistency
+	if c.l1Cache != nil {
+		c.l1Cache.Delete(key)
+	}
+
 	conn, _, err := c.getConn(key)
 	if err != nil {
 		return err
@@ -154,6 +183,11 @@ func (c *Client) Set(ctx context.Context, key string, value []byte, ttl time.Dur
 
 // Delete removes a key from the cache.
 func (c *Client) Delete(ctx context.Context, key string) (bool, error) {
+	// Invalidate L1 cache
+	if c.l1Cache != nil {
+		c.l1Cache.Delete(key)
+	}
+
 	conn, _, err := c.getConn(key)
 	if err != nil {
 		return false, err
@@ -224,5 +258,10 @@ func (c *Client) Close() error {
 		}
 	}
 	c.conns = make(map[string]*grpc.ClientConn)
+
+	if c.l1Cache != nil {
+		c.l1Cache.Clear()
+	}
+
 	return firstErr
 }
