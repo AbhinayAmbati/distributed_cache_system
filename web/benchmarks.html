@@ -98,7 +98,7 @@
             <section class="mb-12 border-t border-borderMuted pt-10">
                 <h2 class="font-sans text-base font-bold tracking-tight mb-4 text-charcoal">Test 1: Live 3-Node Cluster Load Test</h2>
                 <p class="text-lg leading-relaxed text-mutedCharcoal mb-4">
-                    <strong>Method</strong>: We ran 50,000 operations (20% writes, 80% reads) across 8 concurrent goroutine workers against the live 3-node cluster. Keys were drawn from a pool of 1,000 unique items. The test measured end-to-end throughput including gRPC serialization, network loopback, hash ring lookup, shard selection, and storage engine access.
+                    <strong>Method</strong>: We ran two load test scenarios (50,000 operations and 5,000,000 operations, with 20% writes and 80% reads) across 8 concurrent goroutine workers against the live 3-node cluster. Keys were drawn from a pool of 1,000 unique items. The test measured end-to-end throughput including gRPC serialization, network loopback, hash ring lookup, shard selection, and storage engine access.
                 </p>
                 <p class="text-lg leading-relaxed text-mutedCharcoal mb-6">
                     <strong>Result</strong>:
@@ -109,45 +109,53 @@
                         <thead>
                             <tr class="border-b border-charcoal">
                                 <th class="py-3 px-4 font-semibold text-charcoal">Metric</th>
-                                <th class="py-3 px-4 font-semibold text-terracotta bg-terracottaLight border-l border-r border-terracottaBorder">Measured Value</th>
+                                <th class="py-3 px-4 font-semibold text-charcoal">Short Burst (50K Ops)</th>
+                                <th class="py-3 px-4 font-semibold text-terracotta bg-terracottaLight border-l border-r border-terracottaBorder">Sustained Load (5M Ops)</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-borderMuted">
                             <tr>
                                 <td class="py-3.5 px-4 font-medium">Throughput (QPS)</td>
-                                <td class="py-3.5 px-4 font-bold text-terracotta bg-terracottaLight border-l border-r border-terracottaBorder">8,399.68 req/sec</td>
+                                <td class="py-3.5 px-4 text-mutedCharcoal">8,399.68 req/sec</td>
+                                <td class="py-3.5 px-4 font-bold text-terracotta bg-terracottaLight border-l border-r border-terracottaBorder">9,405.64 req/sec</td>
                             </tr>
                             <tr>
                                 <td class="py-3.5 px-4 font-medium">Total Operations</td>
-                                <td class="py-3.5 px-4 font-bold text-terracotta bg-terracottaLight border-l border-r border-terracottaBorder">50,000</td>
+                                <td class="py-3.5 px-4 text-mutedCharcoal">50,000</td>
+                                <td class="py-3.5 px-4 font-bold text-terracotta bg-terracottaLight border-l border-r border-terracottaBorder">5,000,000</td>
                             </tr>
                             <tr>
                                 <td class="py-3.5 px-4 font-medium">Completion Time</td>
-                                <td class="py-3.5 px-4 font-bold text-terracotta bg-terracottaLight border-l border-r border-terracottaBorder">5.95 seconds</td>
+                                <td class="py-3.5 px-4 text-mutedCharcoal">5.95 seconds</td>
+                                <td class="py-3.5 px-4 font-bold text-terracotta bg-terracottaLight border-l border-r border-terracottaBorder">8 minutes 51.60 seconds</td>
                             </tr>
                             <tr>
                                 <td class="py-3.5 px-4 font-medium">Successful Writes</td>
-                                <td class="py-3.5 px-4 font-bold text-terracotta bg-terracottaLight border-l border-r border-terracottaBorder">9,901</td>
+                                <td class="py-3.5 px-4 text-mutedCharcoal">9,901</td>
+                                <td class="py-3.5 px-4 font-bold text-terracotta bg-terracottaLight border-l border-r border-terracottaBorder">999,983</td>
                             </tr>
                             <tr>
                                 <td class="py-3.5 px-4 font-medium">Successful Reads</td>
-                                <td class="py-3.5 px-4 font-bold text-terracotta bg-terracottaLight border-l border-r border-terracottaBorder">40,099</td>
+                                <td class="py-3.5 px-4 text-mutedCharcoal">40,099</td>
+                                <td class="py-3.5 px-4 font-bold text-terracotta bg-terracottaLight border-l border-r border-terracottaBorder">4,000,017</td>
                             </tr>
                             <tr>
                                 <td class="py-3.5 px-4 font-medium">Cache Hit Rate</td>
+                                <td class="py-3.5 px-4 text-mutedCharcoal">90.09%</td>
                                 <td class="py-3.5 px-4 font-bold text-terracotta bg-terracottaLight border-l border-r border-terracottaBorder">
-                                    90.09% <span class="bg-forestLight text-forestGreen text-xs font-semibold px-1.5 py-0.5 rounded ml-1">Excellent</span>
+                                    99.91% <span class="bg-forestLight text-forestGreen text-xs font-semibold px-1.5 py-0.5 rounded ml-1">Excellent</span>
                                 </td>
                             </tr>
                             <tr>
                                 <td class="py-3.5 px-4 font-medium">Errors Encountered</td>
-                                <td class="py-3.5 px-4 font-bold text-terracotta bg-terracottaLight border-l border-r border-terracottaBorder">0 / 50,000</td>
+                                <td class="py-3.5 px-4 text-mutedCharcoal">0 / 50,000</td>
+                                <td class="py-3.5 px-4 font-bold text-terracotta bg-terracottaLight border-l border-r border-terracottaBorder">0 / 5,000,000</td>
                             </tr>
                         </tbody>
                     </table>
                 </div>
                 <p class="text-base leading-relaxed text-mutedCharcoal">
-                    <strong>Key Insight</strong>: Zero errors across 50,000 operations confirms that the consistent hash ring, bounded loads redirection, and async replication pipeline are all functioning correctly under concurrent pressure. The 90.09% cache hit rate demonstrates effective key distribution across the 3-node cluster with a 1,000-key working set.
+                    <strong>Key Insight</strong>: Zero errors across both 50,000 and 5,000,000 operations confirms that the consistent hash ring, bounded loads redirection, and async replication pipeline are all functioning correctly under both short burst and sustained concurrent pressure. The cache hit rate increases from 90.09% to 99.91% as the cache warms up and L1 cache utilization peaks under sustained load.
                 </p>
             </section>
 

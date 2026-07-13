@@ -13,7 +13,7 @@ import (
 
 const (
 	numWorkers   = 8            // Number of concurrent goroutines making requests
-	totalOps     = 50000        // Total number of operations to run
+	totalOps     = 5000000      // Total number of operations to run
 	writeRatio   = 0.2          // 20% writes, 80% reads
 	keyRange     = 1000         // Keyspace size (0 to 999) to simulate realistic cache hit rates
 	valSizeBytes = 512          // 512 bytes value size
