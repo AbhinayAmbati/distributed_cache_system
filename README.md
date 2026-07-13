@@ -4,7 +4,7 @@ A self-hosted, ultra-high-performance, sharded in-memory distributed key-value s
 
 ---
 
-## 📐 Overall System Architecture
+## Overall System Architecture
 
 This project is structured as a collection of independent, peer-to-peer cache nodes that self-organize into a cluster. The architecture ensures there is no single point of failure (SPOF) and no centralized coordination bottleneck.
 
@@ -24,7 +24,7 @@ Below is the high-level architecture diagram showing how the components fit toge
 
 ---
 
-## 🔍 In-Depth Component Walkthrough
+## In-Depth Component Walkthrough
 
 ### 1. The Storage Engine & TTL Sweeper
 
@@ -73,24 +73,7 @@ Standard consistent hashing can lead to hot-spotting if a single key or hash ran
 
 For decentralized, coordinate-free cluster management, the system implements the **SWIM (Scalable Weakly-consistent Infection-style Process Group Membership Protocol)**.
 
-```
-       SWIM Ping-Ack & Ping-Req Protocol
-      ┌─────────────────────────────────┐
-      │             Node A              │
-      └──────┬───────────────────▲──────┘
-             │ 1. Direct Ping    │ 2. Ack
-             │    (UDP)          │    (UDP)
-             ▼                   │
-      ┌──────────┐               │
-      │  Node B  │ (Unresponsive)│
-      └──────────┘               │
-             ▲                   │
-             │ 3. Ping-Req       │ 5. Proxy Ack
-             │    (UDP)          │    (UDP)
-      ┌──────┴───┐               │
-      │  Node C  ├───────────────┘
-      └──────────┘  4. Indirect Ping (UDP) ──► Node B
-```
+![SWIM Ping-Ack & Ping-Req Protocol](diagrams/swim_ping_protocol.png)
 
 #### Failure Detection Cycle
 Every node runs a periodic failure detection loop (default 500ms):
@@ -131,19 +114,7 @@ When the SWIM protocol detects that a node is `DEAD` and removes it from the rin
 
 To prevent cluster instability under extreme read traffic targeting a single key (the "Slashdot effect"), the system employs real-time mitigation.
 
-```
-                 Count-Min Sketch (4 x 4096)
-               ┌───┬───┬───┬───┬───┬───┬───┐
-      Hash 1 ──►   │ 1 │   │   │   │   │   │
-               ├───┼───┼───┼───┼───┼───┼───┤
-      Hash 2 ──►   │   │   │ 3 │   │   │   │
-               ├───┼───┼───┼───┼───┼───┼───┤
-      Hash 3 ──►   │   │ 2 │   │   │   │   │
-               ├───┼───┼───┼───┼───┼───┼───┤
-      Hash 4 ──►   │ 1 │   │   │   │   │   │
-               └───┴───┴───┴───┴───┴───┴───┘
-                Estimate = Min(1, 3, 2, 1) = 1
-```
+![Count-Min Sketch](diagrams/count_min_sketch.png)
 
 #### Count-Min Sketch (CMS) Detector
 On every `Get` request, the server records the key access in a Count-Min Sketch:
@@ -170,7 +141,7 @@ If the frequency estimate of a key exceeds the hot key threshold:
 
 ---
 
-## 🔄 End-to-End Communication Flows
+## End-to-End Communication Flows
 
 The diagrams below demonstrate how components communicate during read, write, and failure scenarios.
 
@@ -224,7 +195,7 @@ The sequence diagram below displays the path of a `SET` request from the client 
 
 ---
 
-## 🛠️ Compilation & Execution
+## Compilation & Execution
 
 ### 1. Build from Source
 Use the provided `Makefile` to compile the binary:
@@ -249,7 +220,7 @@ To test consistent hashing, SWIM gossip, and replication, launch three terminals
 
 ---
 
-## 🧪 Testing and Verification
+## Testing and Verification
 
 ### 1. Automated Tests
 Run the unit and integration tests with race detection:
@@ -270,7 +241,7 @@ go test -bench="." -benchmem .\client
 
 ---
 
-## 📡 HTTP APIs & Chaos Endpoints
+## HTTP APIs & Chaos Endpoints
 
 Each node exposes admin, status, and chaos endpoints on its HTTP port (e.g. `:9001`).
 
@@ -303,7 +274,7 @@ Each node exposes admin, status, and chaos endpoints on its HTTP port (e.g. `:90
 
 ---
 
-## 🏁 Conclusion
+## Conclusion
 
 This Consistent Hashing-Based Distributed Cache demonstrates a production-style implementation of core distributed systems patterns using Go. By avoiding central orchestrators and relying on decentralized, peer-to-peer SWIM membership, the cluster achieves native self-healing, scaling, and fault tolerance.
 
