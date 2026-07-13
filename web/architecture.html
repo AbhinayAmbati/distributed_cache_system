@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SWIM Distributed Cache: System Architecture</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        warmBg: '#f9f6f0',
+                        warmCard: '#f4f0e6',
+                        charcoal: '#191816',
+                        mutedCharcoal: '#4a4944',
+                        terracotta: '#cc5a37',
+                        borderMuted: '#e3e2dc',
+                    },
+                    fontFamily: {
+                        serif: ['Newsreader', 'Georgia', 'serif'],
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-warmBg text-charcoal font-serif antialiased px-6 py-12 md:py-20">
+    <div class="max-w-3xl mx-auto">
+        <nav class="mb-14">
+            <div class="flex items-center justify-between py-4 border-b border-borderMuted">
+                <a href="index.html" class="font-sans text-sm font-bold tracking-tight text-charcoal hover:text-terracotta transition flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-terracotta inline-block"></span>
+                    Distributed Cache
+                </a>
+                <div class="flex items-center gap-1 font-sans text-xs">
+                    <a href="index.html" class="px-3 py-1.5 rounded-full font-medium text-mutedCharcoal hover:text-charcoal hover:bg-[#eae8e2] transition">Overview</a>
+                    <a href="benchmarks.html" class="px-3 py-1.5 rounded-full font-medium text-mutedCharcoal hover:text-charcoal hover:bg-[#eae8e2] transition">Benchmarks</a>
+                    <a href="architecture.html" class="px-3 py-1.5 rounded-full font-medium bg-charcoal text-warmBg">Architecture</a>
+                    <a href="quickstart.html" class="px-3 py-1.5 rounded-full font-medium text-mutedCharcoal hover:text-charcoal hover:bg-[#eae8e2] transition">Quick Start</a>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main>
+            <header class="mb-10">
+                <span class="font-sans text-xs font-semibold uppercase tracking-wider text-terracotta mb-3 block">System Design</span>
+                <h1 class="font-sans text-2xl md:text-3xl font-bold tracking-tight text-charcoal leading-tight mb-4">
+                    Underlying Architecture & Core Concepts
+                </h1>
+                <p class="font-sans text-sm text-mutedCharcoal">Decentralized protocols and diagrams powering the cache</p>
+            </header>
+
+            <!-- Overall System Architecture Diagram -->
+            <section class="mb-14">
+                <h2 class="font-sans text-lg font-bold tracking-tight mb-4 text-charcoal">Overall Cluster Topology</h2>
+                <p class="text-lg leading-relaxed text-mutedCharcoal mb-6">
+                    This project is structured as a collection of independent, peer-to-peer cache nodes that self-organize into a cluster. The architecture ensures there is no single point of failure (SPOF) and no centralized coordination bottleneck.
+                </p>
+                <div class="border border-borderMuted rounded-xl p-2 bg-warmCard mb-3">
+                    <img src="../diagrams/cache_architecture.png" alt="Overall Cache Architecture" class="w-full h-auto rounded-lg bg-white">
+                </div>
+                <p class="font-sans text-xs text-mutedCharcoal italic mb-6">Figure 1: High-level peer-to-peer topology showing Client Routing, gRPC operations, and Gossip synchronization channels.</p>
+            </section>
+
+            <!-- Concept 1: Storage Engine -->
+            <section class="mb-14 border-t border-borderMuted pt-10">
+                <h2 class="font-sans text-lg font-bold tracking-tight mb-4 text-charcoal">1. The Storage Engine & TTL Sweeper</h2>
+                <div class="border border-borderMuted rounded-xl p-2 bg-warmCard mb-4">
+                    <img src="../diagrams/storage_engine.png" alt="Storage Engine Lock Sharding" class="w-full h-auto rounded-lg bg-white">
+                </div>
+                <p class="font-sans text-xs text-mutedCharcoal italic mb-6">Figure 2: Lock sharding structure mapping keys to individual RWMutex storage buckets.</p>
+                
+                <h3 class="font-sans text-base font-semibold text-charcoal mb-2">Internal Sharding</h3>
+                <p class="text-lg leading-relaxed text-mutedCharcoal mb-4">
+                    To prevent <strong>Global Lock Contention</strong>, the store partitions the keyspace into <strong>256 distinct shards</strong>:
+                </p>
+                <ul class="list-disc pl-6 text-lg text-mutedCharcoal mb-6 space-y-2">
+                    <li><strong>Hashing</strong>: A key's target shard is computed using the FNV-1a hash algorithm: <code class="font-mono text-sm bg-warmCard px-1.5 py-0.5 rounded">Shard Index = fnv1a(key) % 256</code>.</li>
+                    <li><strong>Concurrency</strong>: Each shard contains its own <code>sync.RWMutex</code> protecting its underlying map. This design permits concurrent read/write access across different shards, ensuring high-throughput under parallel client requests.</li>
+                </ul>
+
+                <h3 class="font-sans text-base font-semibold text-charcoal mb-2">Hybrid TTL Expiration</h3>
+                <p class="text-lg leading-relaxed text-mutedCharcoal mb-4">
+                    Stale memory reclamation is performed via a hybrid lazy-and-active scheme:
+                </p>
+                <ul class="list-disc pl-6 text-lg text-mutedCharcoal mb-4 space-y-2">
+                    <li><strong>Lazy Expiration (On-Demand)</strong>: When a <code>Get</code> operation targets a key, the store checks the expiry. If the timestamp is in the past, the entry is deleted immediately, and a cache-miss is returned.</li>
+                    <li><strong>Active Expiration (Background)</strong>: A background sweeper thread runs periodically (every 100ms by default) cycling through one shard at a time:
+                        <ol class="list-decimal pl-6 mt-2 space-y-1 text-sm font-sans">
+                            <li>It randomly samples <strong>20 keys</strong> from the active shard.</li>
+                            <li>It deletes any keys that are expired.</li>
+                            <li>If <strong>more than 25%</strong> (5 keys) of the sampled set are found to be expired, the sweeper immediately repeats the process on the same shard without waiting for the next tick, rapidly reclaiming memory during bulk expiry events.</li>
+                        </ol>
+                    </li>
+                </ul>
+            </section>
+
+            <!-- Concept 2: Bounded Loads -->
+            <section class="mb-14 border-t border-borderMuted pt-10">
+                <h2 class="font-sans text-lg font-bold tracking-tight mb-4 text-charcoal">2. Consistent Hashing with Bounded Loads</h2>
+                <div class="border border-borderMuted rounded-xl p-2 bg-warmCard mb-4">
+                    <img src="../diagrams/hash_ring.png" alt="Consistent Hashing Ring" class="w-full h-auto rounded-lg bg-white">
+                </div>
+                <p class="font-sans text-xs text-mutedCharcoal italic mb-6">Figure 3: Virtual node assignment clockwise on the consistent hashing ring.</p>
+                
+                <h3 class="font-sans text-base font-semibold text-charcoal mb-2">Virtual Nodes (VNodes)</h3>
+                <p class="text-lg leading-relaxed text-mutedCharcoal mb-4">
+                    To prevent statistical imbalance (skewed load on specific nodes), each physical node is mapped to <strong>150 virtual nodes</strong> (VNodes) distributed randomly on the ring:
+                </p>
+                <div class="bg-[#faf9f6] border border-borderMuted p-4 rounded-lg font-mono text-xs text-charcoal mb-6 overflow-x-auto">
+                    Hash = fnv1a(NodeID + "delimiter" + strconv.Itoa(VNodeIndex))
+                </div>
+                <p class="text-lg leading-relaxed text-mutedCharcoal mb-4">
+                    The ring is implemented as a sorted slice of VNodes. Binary search ($O(\log(\text{nodes} \times 150))$) resolves key lookups by locating the first VNode hash greater than or equal to the key's hash.
+                </p>
+
+                <h3 class="font-sans text-base font-semibold text-charcoal mb-2">Google's Bounded Loads Algorithm</h3>
+                <p class="text-lg leading-relaxed text-mutedCharcoal mb-4">
+                    Standard consistent hashing can lead to hot-spotting if a single key or hash range receives sudden high volume. This system implements Bounded Loads:
+                </p>
+                <ul class="list-disc pl-6 text-lg text-mutedCharcoal mb-4 space-y-2">
+                    <li><strong>Metric</strong>: Each physical node tracks its active concurrent requests via an atomic counter.</li>
+                    <li><strong>Load Limit</strong>: The ring computes the average load of all active nodes. A node is considered overloaded if: <code class="font-mono text-xs bg-warmCard px-1.5 py-0.5 rounded">Node Load > (1 + &epsilon;) * Average Load</code> (default $\epsilon = 0.25$, capping max load at 125% of the cluster average).</li>
+                    <li><strong>Redirection</strong>: During lookup, if the primary target node is overloaded, the lookup algorithm moves <strong>clockwise</strong> on the ring, testing subsequent VNodes until it locates a node with load within the permitted limit.</li>
+                </ul>
+            </section>
+
+            <!-- Concept 3: SWIM Gossip -->
+            <section class="mb-14 border-t border-borderMuted pt-10">
+                <h2 class="font-sans text-lg font-bold tracking-tight mb-4 text-charcoal">3. The SWIM Gossip Protocol & Cluster Membership</h2>
+                <div class="border border-borderMuted rounded-xl p-2 bg-warmCard mb-4">
+                    <img src="../diagrams/swim_ping_protocol.png" alt="SWIM Ping Protocol" class="w-full h-auto rounded-lg bg-white">
+                </div>
+                <p class="font-sans text-xs text-mutedCharcoal italic mb-6">Figure 4: Direct and indirect UDP ping flow.</p>
+                
+                <h3 class="font-sans text-base font-semibold text-charcoal mb-2">Failure Detection Cycle</h3>
+                <p class="text-lg leading-relaxed text-mutedCharcoal mb-4">
+                    Every node runs a periodic failure detection loop (default 500ms):
+                </p>
+                <ol class="list-decimal pl-6 text-lg text-mutedCharcoal mb-6 space-y-2">
+                    <li><strong>Direct Probe</strong>: The node sends a <code>MsgPing</code> UDP packet containing its current incarnation counter to a randomly selected peer.</li>
+                    <li><strong>Indirect Probe (Ping-Req)</strong>: If the target node does not return a <code>MsgAck</code> within a specified timeout (default 200ms):
+                        <ul class="list-disc pl-6 mt-1 space-y-1 text-base">
+                            <li>The node selects $K$ random helper nodes (default `3`) and transmits a <code>MsgPingReq</code> packet.</li>
+                            <li>These helpers attempt to ping the target node directly on behalf of the originating node.</li>
+                            <li>If any helper successfully receives an Ack from the target, it relays the Ack back to the initiator.</li>
+                        </ul>
+                    </li>
+                    <li><strong>Suspicion State</strong>: If both direct and indirect probes fail, the initiator transitions the target node's state to <code>SUSPECT</code> in the registry and starts a suspicion timer (default 3 seconds).</li>
+                    <li><strong>Dead Declaration</strong>: If the suspected node does not refute the suspicion before the suspicion timer expires, it is marked as <code>DEAD</code> and removed from the consistent hash ring.</li>
+                </ol>
+
+                <h3 class="font-sans text-base font-semibold text-charcoal mb-2">Gossip Dissemination & Refutation</h3>
+                <ul class="list-disc pl-6 text-lg text-mutedCharcoal mb-4 space-y-2">
+                    <li><strong>Piggybacking</strong>: Membership updates (<code>JOIN</code>, <code>ALIVE</code>, <code>SUSPECT</code>, <code>DEAD</code>, <code>LEFT</code>) are queued and appended (up to 10 updates) to outgoing <code>MsgPing</code> and <code>MsgAck</code> UDP packets, spreading infection-style across the cluster.</li>
+                    <li><strong>Incarnation Counter</strong>: Used to refute false-positive failure detections. If a node receives a gossip update stating that it is <code>SUSPECT</code>, it increments its own incarnation counter and broadcasts an <code>ALIVE</code> update, overriding the stale failure reports.</li>
+                </ul>
+            </section>
+
+            <!-- Concept 4: Replication, Failover & Key Synchronization -->
+            <section class="mb-14 border-t border-borderMuted pt-10">
+                <h2 class="font-sans text-lg font-bold tracking-tight mb-4 text-charcoal">4. Replication, Failover & Key Synchronization</h2>
+                <h3 class="font-sans text-base font-semibold text-charcoal mb-2">Asynchronous Replication Write Path</h3>
+                <ol class="list-decimal pl-6 text-lg text-mutedCharcoal mb-6 space-y-2">
+                    <li>The client looks up the key's primary node on the hash ring and sends a <code>Set</code> request.</li>
+                    <li>The primary node writes the key-value pair to its local sharded storage.</li>
+                    <li>The primary node increments its atomic sequence counter and spawns concurrent goroutines to propagate a <code>Replicate</code> gRPC request containing the payload, sequence ID, and TTL to the $N-1$ secondary nodes in the key's replica set.</li>
+                    <li>The primary returns success to the client immediately without blocking on secondary confirmations (ensuring ultra-low write latency).</li>
+                </ol>
+
+                <h3 class="font-sans text-base font-semibold text-charcoal mb-2">Failover & Streaming Re-Replication</h3>
+                <ol class="list-decimal pl-6 text-lg text-mutedCharcoal mb-4 space-y-2">
+                    <li><strong>Primary Promotion</strong>: When the SWIM protocol detects that a node is <code>DEAD</code> and removes it, the next live replica in the hash ring automatically assumes the primary role.</li>
+                    <li><strong>Re-Replication Trigger</strong>: The newly promoted primary detects that the replication factor has fallen below $N$ for those keys. It scans its local store and asynchronously replicates keys to the new secondary node introduced in the updated hash ring.</li>
+                    <li><strong>Streaming Key Synchronization</strong>: When a node is promoted or joins, it can call a streaming <code>TransferKeys</code> gRPC RPC on the remaining cluster nodes. The remote nodes iterate through their sharded store and stream matching keys back to the caller over a gRPC stream.</li>
+                </ol>
+            </section>
+
+            <!-- Concept 5: Count-Min Sketch & L1 Mitigation -->
+            <section class="mb-14 border-t border-borderMuted pt-10">
+                <h2 class="font-sans text-lg font-bold tracking-tight mb-4 text-charcoal">5. Probabilistic Hot Key Detection & Mitigation</h2>
+                <div class="border border-borderMuted rounded-xl p-2 bg-warmCard mb-4">
+                    <img src="../diagrams/count_min_sketch.png" alt="Count-Min Sketch Grid" class="w-full h-auto rounded-lg bg-white">
+                </div>
+                <p class="font-sans text-xs text-mutedCharcoal italic mb-6">Figure 5: Fixed-size multi-hashing layout of the Count-Min Sketch frequency detector.</p>
+                
+                <h3 class="font-sans text-base font-semibold text-charcoal mb-2">Count-Min Sketch (CMS) Detector</h3>
+                <p class="text-lg leading-relaxed text-mutedCharcoal mb-4">
+                    On every <code>Get</code> request, the server records the key access in a Count-Min Sketch:
+                </p>
+                <ul class="list-disc pl-6 text-lg text-mutedCharcoal mb-6 space-y-2">
+                    <li><strong>Structure</strong>: A 2D array of counters with $d=4$ rows (hash functions) and $w=4096$ columns.</li>
+                    <li><strong>Update & Query</strong>: For a key, it computes 4 independent hashes and increments the corresponding counter. The frequency estimate is the minimum of the 4 counters: <code class="font-mono text-xs bg-warmCard px-1.5 py-0.5 rounded">Estimate = min(Table[i][hash_i(key) % 4096])</code>. This guarantees that we never underestimate frequency, with bounded overestimation error.</li>
+                    <li><strong>Decay Loop</strong>: A background thread runs every 60 seconds and halves all counters in the sketch, preventing historic hot keys from permanently triggering mitigations.</li>
+                </ul>
+
+                <h3 class="font-sans text-base font-semibold text-charcoal mb-2">Mitigation Strategy 1: Key Splitting</h3>
+                <p class="text-lg leading-relaxed text-mutedCharcoal mb-4">
+                    If the frequency estimate of a key exceeds the hot key threshold:
+                </p>
+                <ol class="list-decimal pl-6 text-lg text-mutedCharcoal mb-6 space-y-2">
+                    <li><strong>Splitting Activation</strong>: The server marks the key as split and creates $S=4$ sharded copies in the local store named <code>key:shard_0</code> through <code>key:shard_3</code>.</li>
+                    <li><strong>Replication</strong>: The primary writes the original value across all $S$ shards.</li>
+                    <li><strong>Routing</strong>: On subsequent writes to the hot key, the primary writes to all $S$ shards. On reads, the client SDK hashes its own client ID to route requests to a specific shard: <code class="font-mono text-xs bg-warmCard px-1.5 py-0.5 rounded">Target Key = key + ":shard-i" + (hash(ClientID) % S)</code>. This splits the read load across different shards.</li>
+                </ol>
+
+                <h3 class="font-sans text-base font-semibold text-charcoal mb-2">Mitigation Strategy 2: Client L1 LRU Cache</h3>
+                <p class="text-lg leading-relaxed text-mutedCharcoal mb-4">
+                    When a node processes a <code>Get</code> request and estimates that a key is hot, it sets <code>IsHot = true</code> in the <code>GetResponse</code>. Upon receiving this, the Client SDK caches the key-value pair locally in its L1 cache. Subsequent reads from the client intercept at the L1 layer, bypassing the network hop entirely.
+                </p>
+            </section>
+
+            <!-- Concept 6: End-to-End Sequence steps -->
+            <section class="mb-0 border-t border-borderMuted pt-10">
+                <h2 class="font-sans text-lg font-bold tracking-tight mb-6 text-charcoal">6. End-to-End Communication Flows</h2>
+                
+                <!-- Set sequence -->
+                <div class="mb-10">
+                    <h3 class="font-sans text-base font-semibold text-charcoal mb-3">Write (SET) Operation Flow</h3>
+                    <div class="border border-borderMuted rounded-xl p-2 bg-warmCard mb-4">
+                        <img src="../diagrams/set_operation_sequence.png" alt="SET Operation Sequence" class="w-full h-auto rounded-lg bg-white">
+                    </div>
+                    <p class="font-sans text-xs text-mutedCharcoal italic mb-4">Figure 6a: Client SET replica-propagation sequence.</p>
+                    <h4 class="font-sans text-sm font-semibold uppercase text-terracotta mb-2">Sequence Steps:</h4>
+                    <ol class="list-decimal pl-6 text-base text-mutedCharcoal space-y-2">
+                        <li><strong>L1 Invalidation</strong>: The Client SDK checks if the key exists in its local L1 cache. If present, it deletes the entry to prevent stale reads.</li>
+                        <li><strong>Ring Lookup</strong>: The Client SDK queries its local consistent hash ring to find the primary node responsible for the key.</li>
+                        <li><strong>RPC Execution</strong>: The Client sends a <code>SetRequest</code> to the primary node via gRPC, utilizing a custom JSON codec.</li>
+                        <li><strong>Primary Validation & Split Check</strong>: The primary node receives the write. If the key is currently mitigated via Key Splitting, the primary writes the value to the original key and all $S$ split shards. Otherwise, it writes only to the original key in the local sharded map.</li>
+                        <li><strong>Async Replication</strong>: The primary returns a successful <code>SetResponse</code> to the client. Simultaneously, it triggers async goroutines to call the <code>Replicate</code> RPC on the secondary replicas, propagating the data.</li>
+                    </ol>
+                </div>
+
+                <!-- Get sequence -->
+                <div class="mb-10 border-t border-borderMuted pt-8">
+                    <h3 class="font-sans text-base font-semibold text-charcoal mb-3">Read (GET) Operation Flow</h3>
+                    <div class="border border-borderMuted rounded-xl p-2 bg-warmCard mb-4">
+                        <img src="../diagrams/get_flow.png" alt="GET Operation Flow" class="w-full h-auto rounded-lg bg-white">
+                    </div>
+                    <p class="font-sans text-xs text-mutedCharcoal italic mb-4">Figure 6b: Client GET routing sequence (L1 check, local lookup, proxy routing).</p>
+                    <h4 class="font-sans text-sm font-semibold uppercase text-terracotta mb-2">Sequence Steps:</h4>
+                    <ol class="list-decimal pl-6 text-base text-mutedCharcoal space-y-2">
+                        <li><strong>L1 Check</strong>: The client checks its L1 LRU Cache. On a hit, the value is returned immediately.</li>
+                        <li><strong>Ring Lookup</strong>: On a miss, the client queries the hash ring to locate the primary node.</li>
+                        <li><strong>Overload Check</strong>: The gRPC server increments the active request counter. If the target node is overloaded, it delegates the request to the next node in the ring. If the node is not in the replica set for the key, it proxies the request to the correct node.</li>
+                        <li><strong>CMS Increment</strong>: The server updates the Count-Min Sketch, estimating the key's frequency.</li>
+                        <li><strong>Local Read</strong>: The server performs a read on the local sharded map (lazy checking the TTL).</li>
+                        <li><strong>Mitigation Check</strong>: If the estimated frequency exceeds the threshold and mitigation is not active, the server triggers Key Splitting. If already split, the server reads the value from the shard corresponding to the hashed client ID.</li>
+                        <li><strong>Response & Promotion</strong>: The server returns the payload to the client. If the key is hot, it includes <code>IsHot = true</code>. The client SDK then stores the value in its L1 cache.</li>
+                    </ol>
+                </div>
+
+                <!-- SWIM Failure sequence -->
+                <div class="mb-0 border-t border-borderMuted pt-8">
+                    <h3 class="font-sans text-base font-semibold text-charcoal mb-3">SWIM Failure Detection & Self-Healing Flow</h3>
+                    <div class="border border-borderMuted rounded-xl p-2 bg-warmCard mb-4">
+                        <img src="../diagrams/swim_flow.png" alt="SWIM Failure Detection Flow" class="w-full h-auto rounded-lg bg-white">
+                    </div>
+                    <p class="font-sans text-xs text-mutedCharcoal italic mb-4">Figure 6c: Gossip state transition sequence (Alive, Suspect, Dead).</p>
+                    <h4 class="font-sans text-sm font-semibold uppercase text-terracotta mb-2">Sequence Steps:</h4>
+                    <ol class="list-decimal pl-6 text-base text-mutedCharcoal space-y-2">
+                        <li><strong>UDP Ping</strong>: Node A selects Node B and sends a <code>MsgPing</code>. Node B is dead or partitioned and does not reply.</li>
+                        <li><strong>Ping-Req Routing</strong>: Node A sends <code>MsgPingReq</code> to Node C and Node D, asking them to probe Node B.</li>
+                        <li><strong>Indirect Probing</strong>: Node C and Node D send UDP pings to Node B. Neither receives an answer.</li>
+                        <li><strong>Suspicion Entry</strong>: Having received no Acks within the timeout, Node A marks Node B as <code>SUSPECT</code>, starts a 3-second timer, and gossips the suspicion to the cluster.</li>
+                        <li><strong>Dead Confirmation</strong>: The suspicion timer expires without refutation. Node A marks Node B as <code>DEAD</code> and gossips the state change.</li>
+                        <li><strong>Ring Sync</strong>: All nodes receive the <code>DEAD</code> gossip, remove Node B from their hash rings, and trigger the replication manager's failover handler.</li>
+                        <li><strong>Failover Execution</strong>: The replication manager identifies keys for which it is the new primary. It runs <code>ReplicateWrite</code> to sync these keys to the new secondary replicas.</li>
+                    </ol>
+                </div>
+            </section>
+        </main>
+
+        <!-- Unified Footer -->
+        <footer class="border-t border-borderMuted pt-6 pb-2 mt-16 font-sans text-xs text-mutedCharcoal">
+            <div class="flex flex-col md:flex-row items-center justify-between gap-2">
+                <p>Distributed Cache - Open Source &bull; Built with Go &bull; Apache 2.0 License</p>
+                <a href="https://github.com/AbhinayAmbati/distributed_cache_system" target="_blank" class="hover:text-terracotta transition flex items-center gap-1">
+                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                    GitHub
+                </a>
+            </div>
+        </footer>
+    </div>
+</body>
+</html>

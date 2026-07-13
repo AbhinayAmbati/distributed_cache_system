@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Distributed Cache: Project Overview</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        warmBg: '#f9f6f0',
+                        warmCard: '#f4f0e6',
+                        charcoal: '#191816',
+                        mutedCharcoal: '#4a4944',
+                        terracotta: '#cc5a37',
+                        borderMuted: '#e3e2dc',
+                    },
+                    fontFamily: {
+                        serif: ['Newsreader', 'Georgia', 'serif'],
+                        sans: ['Inter', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-warmBg text-charcoal font-serif antialiased px-6 py-12 md:py-20">
+    <div class="max-w-3xl mx-auto">
+        <nav class="mb-14">
+            <div class="flex items-center justify-between py-4 border-b border-borderMuted">
+                <a href="index.html" class="font-sans text-sm font-bold tracking-tight text-charcoal hover:text-terracotta transition flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-terracotta inline-block"></span>
+                    Distributed Cache
+                </a>
+                <div class="flex items-center gap-1 font-sans text-xs">
+                    <a href="index.html" class="px-3 py-1.5 rounded-full font-medium bg-charcoal text-warmBg">Overview</a>
+                    <a href="benchmarks.html" class="px-3 py-1.5 rounded-full font-medium text-mutedCharcoal hover:text-charcoal hover:bg-[#eae8e2] transition">Benchmarks</a>
+                    <a href="architecture.html" class="px-3 py-1.5 rounded-full font-medium text-mutedCharcoal hover:text-charcoal hover:bg-[#eae8e2] transition">Architecture</a>
+                    <a href="quickstart.html" class="px-3 py-1.5 rounded-full font-medium text-mutedCharcoal hover:text-charcoal hover:bg-[#eae8e2] transition">Quick Start</a>
+                </div>
+            </div>
+        </nav>
+
+        <main>
+            <!-- Header -->
+            <header class="mb-12">
+                <span class="font-sans text-xs font-semibold uppercase tracking-wider text-terracotta mb-3 block">Project Overview</span>
+                <h1 class="font-sans text-2xl md:text-3xl font-bold tracking-tight text-charcoal leading-tight mb-4">
+                    Consistent Hashing-Based Distributed Cache
+                </h1>
+                <p class="font-sans text-sm text-mutedCharcoal">End-to-End Architectural Guide</p>
+            </header>
+
+            <!-- What is this project -->
+            <section class="mb-12">
+                <p class="text-xl md:text-2xl leading-relaxed text-charcoal mb-6">
+                    A self-hosted, ultra-high-performance, sharded in-memory distributed key-value store built in Go.
+                </p>
+                <p class="text-lg leading-relaxed text-mutedCharcoal mb-6">
+                    This system is designed for massive scale and extreme resilience, featuring consistent hashing with bounded loads, decentralized SWIM-based cluster membership, asynchronous primary-secondary replication, real-time probabilistic hot-key detection (via Count-Min Sketches), key splitting, client-side L1 LRU caching, and a built-in HTTP chaos engineering framework.
+                </p>
+            </section>
+
+            <!-- The Problem -->
+            <section class="mb-12 border-t border-borderMuted pt-10">
+                <h2 class="font-sans text-lg font-bold tracking-tight mb-4 text-charcoal">The Problem</h2>
+                <p class="text-lg leading-relaxed text-mutedCharcoal mb-4">
+                    Traditional distributed caching systems suffer from several fundamental limitations:
+                </p>
+                <ul class="list-disc pl-6 text-lg text-mutedCharcoal space-y-3 mb-4">
+                    <li><strong>Single Point of Failure (SPOF)</strong>: Systems like Redis Sentinel rely on centralized coordinators to manage failover. If the coordinator fails, the entire cluster becomes unmanageable.</li>
+                    <li><strong>Hot Key Bottlenecks</strong>: Standard consistent hashing maps each key to exactly one node. When a single key receives extreme traffic (the "Slashdot effect"), that node becomes a bottleneck and may crash, taking down all keys it owns.</li>
+                    <li><strong>Global Lock Contention</strong>: Naive in-memory stores protect the entire keyspace with a single mutex, serializing all concurrent requests and destroying throughput under parallel workloads.</li>
+                    <li><strong>No Automatic Failover</strong>: When a node dies in a naively sharded cluster, all keys owned by that node become permanently unreachable until manual intervention restores service.</li>
+                </ul>
+            </section>
+
+            <!-- The Solution -->
+            <section class="mb-12 border-t border-borderMuted pt-10">
+                <h2 class="font-sans text-lg font-bold tracking-tight mb-4 text-charcoal">Our Solution</h2>
+                <p class="text-lg leading-relaxed text-mutedCharcoal mb-6">
+                    This project is structured as a collection of independent, peer-to-peer cache nodes that self-organize into a cluster. The architecture ensures there is <strong>no single point of failure</strong> and <strong>no centralized coordination bottleneck</strong>. Every node is symmetric: it can accept client requests, coordinate replication, detect failures, and participate in cluster membership — all without a designated leader.
+                </p>
+                <div class="border border-borderMuted rounded-xl p-2 bg-warmCard mb-3">
+                    <img src="../diagrams/cache_architecture.png" alt="Overall Cache Architecture" class="w-full h-auto rounded-lg bg-white">
+                </div>
+                <p class="font-sans text-xs text-mutedCharcoal italic mb-6">Figure: High-level peer-to-peer topology showing Client Routing, gRPC operations, and Gossip synchronization channels.</p>
+            </section>
+
+            <!-- Core Components -->
+            <section class="mb-12 border-t border-borderMuted pt-10">
+                <h2 class="font-sans text-lg font-bold tracking-tight mb-6 text-charcoal">Core Components & Their Interactions</h2>
+
+                <div class="space-y-8">
+                    <!-- Component 1 -->
+                    <div>
+                        <h3 class="font-sans text-base font-semibold text-charcoal mb-2">1. Client Space — The Smart Router</h3>
+                        <p class="text-lg leading-relaxed text-mutedCharcoal mb-2">
+                            The client SDK is not a simple RPC stub. It acts as a <strong>smart router</strong> that maintains its own local view of the consistent hash ring. When making a request, the client:
+                        </p>
+                        <ul class="list-disc pl-6 text-base text-mutedCharcoal space-y-1">
+                            <li>Hashes the key using FNV-1a to determine the responsible primary node.</li>
+                            <li>Routes the gRPC query <strong>directly</strong> to that node, bypassing any proxy layer.</li>
+                            <li>Maintains a local <strong>L1 LRU cache</strong> that intercepts requests to keys flagged as "hot" by the server, eliminating network roundtrips entirely for frequently accessed data.</li>
+                            <li>Automatically invalidates L1 entries on writes to prevent stale reads.</li>
+                        </ul>
+                    </div>
+
+                    <!-- Component 2 -->
+                    <div>
+                        <h3 class="font-sans text-base font-semibold text-charcoal mb-2">2. gRPC Communication Layer</h3>
+                        <p class="text-lg leading-relaxed text-mutedCharcoal mb-2">
+                            The high-throughput communication portal for each node, handling two categories of operations:
+                        </p>
+                        <ul class="list-disc pl-6 text-base text-mutedCharcoal space-y-1">
+                            <li><strong>Client-facing queries</strong>: <code>Get</code>, <code>Set</code>, <code>Delete</code>, <code>Expire</code>, and <code>Ping</code> — the public API surface used by application developers.</li>
+                            <li><strong>Internal cluster operations</strong>: <code>Replicate</code> (async write propagation to secondary nodes) and <code>TransferKeys</code> (streaming key synchronization during failover or node join events).</li>
+                        </ul>
+                    </div>
+
+                    <!-- Component 3 -->
+                    <div>
+                        <h3 class="font-sans text-base font-semibold text-charcoal mb-2">3. Consistent Hash Ring with Bounded Loads</h3>
+                        <p class="text-lg leading-relaxed text-mutedCharcoal">
+                            The topology registry that exists on both the client and server side. Each physical node is mapped to <strong>150 virtual nodes</strong> distributed along a 64-bit hash space. Key lookups use binary search ($O(\log n)$) to locate the nearest clockwise VNode. To prevent hot-spotting, the ring implements <strong>Google's Bounded Loads algorithm</strong>: if a node's active load exceeds 125% of the cluster average, the lookup automatically redirects clockwise to the next available node.
+                        </p>
+                    </div>
+
+                    <!-- Component 4 -->
+                    <div>
+                        <h3 class="font-sans text-base font-semibold text-charcoal mb-2">4. Storage Engine</h3>
+                        <p class="text-lg leading-relaxed text-mutedCharcoal">
+                            A highly concurrent, sharded in-memory key-value store. The keyspace is partitioned into <strong>256 independent shards</strong>, each protected by its own <code>sync.RWMutex</code>. This eliminates global lock contention and allows parallel CPU cores to read and write simultaneously across different shards. Each entry stores the byte-payload value, creation timestamp, and an expiration timestamp for TTL enforcement.
+                        </p>
+                    </div>
+
+                    <!-- Component 5 -->
+                    <div>
+                        <h3 class="font-sans text-base font-semibold text-charcoal mb-2">5. TTL Sweeper</h3>
+                        <p class="text-lg leading-relaxed text-mutedCharcoal">
+                            Stale memory is reclaimed through a <strong>hybrid lazy-and-active expiration</strong> scheme. Lazy expiration checks the TTL on every <code>Get</code> and deletes expired entries on-demand. A background sweeper thread runs every 100ms, randomly sampling 20 keys per shard and aggressively re-sampling if more than 25% are expired — rapidly reclaiming memory during bulk expiry events.
+                        </p>
+                    </div>
+
+                    <!-- Component 6 -->
+                    <div>
+                        <h3 class="font-sans text-base font-semibold text-charcoal mb-2">6. Replication Manager</h3>
+                        <p class="text-lg leading-relaxed text-mutedCharcoal">
+                            Tracks replica sets and manages <strong>asynchronous write propagation</strong> from primary to secondary nodes. Writes return to the client immediately after the primary commits locally, while concurrent goroutines replicate the data to $N-1$ secondaries in the background. On node failure, the manager automatically promotes secondaries to primaries and orchestrates streaming key synchronization to restore the replication factor.
+                        </p>
+                    </div>
+
+                    <!-- Component 7 -->
+                    <div>
+                        <h3 class="font-sans text-base font-semibold text-charcoal mb-2">7. SWIM Gossip Protocol</h3>
+                        <p class="text-lg leading-relaxed text-mutedCharcoal">
+                            The decentralized cluster coordination layer. Runs over <strong>UDP</strong>, periodically probing random peers to maintain cluster membership. Uses a direct-ping → indirect-ping-req → suspicion → dead declaration cycle to detect node failures within 3 seconds. Membership updates are piggybacked onto existing UDP packets (up to 10 per message) and spread infection-style across the cluster. An incarnation counter mechanism prevents false-positive failure detections.
+                        </p>
+                    </div>
+
+                    <!-- Component 8 -->
+                    <div>
+                        <h3 class="font-sans text-base font-semibold text-charcoal mb-2">8. Hot Key Detector & Mitigation Engine</h3>
+                        <p class="text-lg leading-relaxed text-mutedCharcoal">
+                            A <strong>Count-Min Sketch</strong> (4 hash functions × 4096 counters) tracks key access frequencies probabilistically with $O(1)$ memory. When a key's estimated frequency exceeds 100 accesses, two mitigations activate simultaneously: <strong>Key Splitting</strong> creates 4 sharded copies of the key to distribute read load across virtual nodes, and the server signals the client to cache the value in its <strong>L1 LRU cache</strong>, dropping read latency from ~530µs to under 1µs.
+                        </p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Key Features Summary -->
+            <section class="mb-12 border-t border-borderMuted pt-10">
+                <h2 class="font-sans text-lg font-bold tracking-tight mb-4 text-charcoal">Key Features at a Glance</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 font-sans">
+                    <div class="bg-[#faf9f6] border border-borderMuted p-5 rounded-lg">
+                        <h3 class="text-xs font-semibold uppercase tracking-wider text-terracotta mb-2">Zero SPOF</h3>
+                        <p class="text-sm text-mutedCharcoal">Fully decentralized. No master node, no ZooKeeper, no Sentinel. Every node is equal.</p>
+                    </div>
+                    <div class="bg-[#faf9f6] border border-borderMuted p-5 rounded-lg">
+                        <h3 class="text-xs font-semibold uppercase tracking-wider text-terracotta mb-2">Self-Healing</h3>
+                        <p class="text-sm text-mutedCharcoal">SWIM detects failures in &lt;3 seconds and automatically promotes replicas and re-replicates keys.</p>
+                    </div>
+                    <div class="bg-[#faf9f6] border border-borderMuted p-5 rounded-lg">
+                        <h3 class="text-xs font-semibold uppercase tracking-wider text-terracotta mb-2">Hot Key Protection</h3>
+                        <p class="text-sm text-mutedCharcoal">Count-Min Sketch detects hot keys in real-time. Key splitting + L1 caching prevent node overload.</p>
+                    </div>
+                    <div class="bg-[#faf9f6] border border-borderMuted p-5 rounded-lg">
+                        <h3 class="text-xs font-semibold uppercase tracking-wider text-terracotta mb-2">Ultra-Low Latency</h3>
+                        <p class="text-sm text-mutedCharcoal">256-shard lock structure, async replication, and L1 cache deliver sub-microsecond reads.</p>
+                    </div>
+                    <div class="bg-[#faf9f6] border border-borderMuted p-5 rounded-lg">
+                        <h3 class="text-xs font-semibold uppercase tracking-wider text-terracotta mb-2">Chaos Engineering</h3>
+                        <p class="text-sm text-mutedCharcoal">Built-in HTTP endpoints to simulate crashes, latency injection, and network partitions.</p>
+                    </div>
+                    <div class="bg-[#faf9f6] border border-borderMuted p-5 rounded-lg">
+                        <h3 class="text-xs font-semibold uppercase tracking-wider text-terracotta mb-2">Bounded Load Balancing</h3>
+                        <p class="text-sm text-mutedCharcoal">Google's algorithm caps node load at 1.25× average, preventing cascading failures under skew.</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Conclusion -->
+            <section class="mb-6 border-t border-borderMuted pt-10">
+                <h2 class="font-sans text-lg font-bold tracking-tight mb-4 text-charcoal">Conclusion</h2>
+                <p class="text-lg leading-relaxed text-mutedCharcoal mb-4">
+                    This Consistent Hashing-Based Distributed Cache demonstrates a production-style implementation of core distributed systems patterns using Go. By avoiding central orchestrators and relying on decentralized, peer-to-peer SWIM membership, the cluster achieves native self-healing, scaling, and fault tolerance.
+                </p>
+                <p class="text-lg leading-relaxed text-mutedCharcoal mb-4">
+                    The system's strength lies in the integration of its advanced mechanisms:
+                </p>
+                <ol class="list-decimal pl-6 text-lg text-mutedCharcoal space-y-3 mb-6">
+                    <li><strong>Google Bounded Loads</strong> works in tandem with consistent hashing to prevent single-node bottlenecks by redirecting requests dynamically under high concurrency.</li>
+                    <li><strong>Count-Min Sketch Hot Key Detection</strong> enables low-memory, real-time frequency estimation, immediately triggering <strong>Key Splitting</strong> to parallelize read workloads and prompting client-side <strong>L1 LRU caching</strong> to bypass the network entirely for the hottest items.</li>
+                    <li><strong>Primary-Secondary replication and automatic replica failover</strong> ensure durability and high availability, even during ungraceful node terminations.</li>
+                    <li><strong>Built-in Chaos APIs</strong> allow engineers to inspect the system under injected failures, latency, and partitions, validating the system's fault-tolerant properties in real-world scenarios.</li>
+                </ol>
+                <p class="text-lg leading-relaxed text-mutedCharcoal">
+                    This architecture offers a robust foundation for building high-scale distributed caches, rate limiters, or state stores that require predictability, low latency, and absolute horizontal scalability.
+                </p>
+            </section>
+
+            <!-- Portal Navigation -->
+            <section class="border-t border-borderMuted pt-10 mb-6">
+                <h2 class="font-sans text-base font-bold tracking-tight mb-6">Explore the Documentation</h2>
+                <div class="space-y-4">
+                    <div>
+                        <h3 class="font-sans text-base font-semibold mb-1">
+                            <a href="benchmarks.html" class="hover:text-terracotta underline decoration-borderMuted hover:decoration-terracotta transition">Performance Benchmarks &rarr;</a>
+                        </h3>
+                        <p class="text-base text-mutedCharcoal">Real QPS, latency, hit-rate, and storage engine throughput metrics collected under concurrent load.</p>
+                    </div>
+                    <div>
+                        <h3 class="font-sans text-base font-semibold mb-1">
+                            <a href="architecture.html" class="hover:text-terracotta underline decoration-borderMuted hover:decoration-terracotta transition">System Architecture &rarr;</a>
+                        </h3>
+                        <p class="text-base text-mutedCharcoal">Deep-dive into algorithms, formulas, sequence diagrams, and architectural diagrams for every component.</p>
+                    </div>
+                    <div>
+                        <h3 class="font-sans text-base font-semibold mb-1">
+                            <a href="quickstart.html" class="hover:text-terracotta underline decoration-borderMuted hover:decoration-terracotta transition">Developer Quick Start &rarr;</a>
+                        </h3>
+                        <p class="text-base text-mutedCharcoal">Build, configure, run a 3-node cluster, integrate the Go SDK, and test with chaos endpoints.</p>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <footer class="border-t border-borderMuted pt-6 pb-2 mt-16 font-sans text-xs text-mutedCharcoal">
+            <div class="flex flex-col md:flex-row items-center justify-between gap-2">
+                <p>Distributed Cache - Open Source &bull; Built with Go &bull; Apache 2.0 License</p>
+                <a href="https://github.com/AbhinayAmbati/distributed_cache_system" target="_blank" class="hover:text-terracotta transition flex items-center gap-1">
+                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                    GitHub
+                </a>
+            </div>
+        </footer>
+    </div>
+</body>
+</html>

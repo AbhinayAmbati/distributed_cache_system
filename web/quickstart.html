@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SWIM Distributed Cache: Quick Start</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        warmBg: '#f9f6f0',
+                        charcoal: '#191816',
+                        mutedCharcoal: '#4a4944',
+                        terracotta: '#cc5a37',
+                        borderMuted: '#e3e2dc',
+                    },
+                    fontFamily: {
+                        serif: ['Newsreader', 'Georgia', 'serif'],
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-warmBg text-charcoal font-serif antialiased px-6 py-12 md:py-20">
+    <div class="max-w-3xl mx-auto">
+        <nav class="mb-14">
+            <div class="flex items-center justify-between py-4 border-b border-borderMuted">
+                <a href="index.html" class="font-sans text-sm font-bold tracking-tight text-charcoal hover:text-terracotta transition flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-terracotta inline-block"></span>
+                    Distributed Cache
+                </a>
+                <div class="flex items-center gap-1 font-sans text-xs">
+                    <a href="index.html" class="px-3 py-1.5 rounded-full font-medium text-mutedCharcoal hover:text-charcoal hover:bg-[#eae8e2] transition">Overview</a>
+                    <a href="benchmarks.html" class="px-3 py-1.5 rounded-full font-medium text-mutedCharcoal hover:text-charcoal hover:bg-[#eae8e2] transition">Benchmarks</a>
+                    <a href="architecture.html" class="px-3 py-1.5 rounded-full font-medium text-mutedCharcoal hover:text-charcoal hover:bg-[#eae8e2] transition">Architecture</a>
+                    <a href="quickstart.html" class="px-3 py-1.5 rounded-full font-medium bg-charcoal text-warmBg">Quick Start</a>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main>
+            <header class="mb-10">
+                <span class="font-sans text-xs font-semibold uppercase tracking-wider text-terracotta mb-3 block">Developer Guide</span>
+                <h1 class="font-sans text-2xl md:text-3xl font-bold tracking-tight text-charcoal leading-tight mb-4">
+                    Developer Quick Start & SDK Guide
+                </h1>
+                <p class="font-sans text-sm text-mutedCharcoal">How to build, run, and integrate the distributed cache cluster</p>
+            </header>
+
+            <!-- Step 1: Compiling -->
+            <section class="mb-10">
+                <h2 class="font-sans text-base font-bold tracking-tight mb-3 text-charcoal">1. Build from Source</h2>
+                <p class="text-lg leading-relaxed text-mutedCharcoal mb-4">
+                    Compile the cache node binary using the provided Makefile or direct Go build:
+                </p>
+                <div class="bg-[#faf9f6] border border-[#e3e2dc] p-4 rounded-lg font-mono text-xs text-charcoal mb-4 overflow-x-auto">
+                    make build
+                </div>
+                <p class="text-lg leading-relaxed text-mutedCharcoal mb-4">
+                    For Windows systems without Make installed, you can compile the executable manually:
+                </p>
+                <div class="bg-[#faf9f6] border border-[#e3e2dc] p-4 rounded-lg font-mono text-xs text-charcoal mb-4 overflow-x-auto">
+                    go build -o bin/cachenode.exe ./cmd/cachenode
+                </div>
+            </section>
+
+            <!-- Step 2: Running cluster -->
+            <section class="mb-10 border-t border-borderMuted pt-8">
+                <h2 class="font-sans text-base font-bold tracking-tight mb-3 text-charcoal">2. Run a Multi-Node Local Cluster</h2>
+                <p class="text-lg leading-relaxed text-mutedCharcoal mb-4">
+                    To test consistent hashing, SWIM gossip, and replication, launch three terminals and start the nodes using command line flags:
+                </p>
+                <div class="bg-[#faf9f6] border border-[#e3e2dc] p-4 rounded-lg font-mono text-xs text-charcoal mb-4 space-y-4 overflow-x-auto">
+                    <div>
+                        <span class="text-terracotta"># Node 1 (Seed Node)</span><br>
+                        ./bin/cachenode -node-id node-1 -grpc-addr 127.0.0.1:7001 -http-addr 127.0.0.1:9001 -gossip-addr 127.0.0.1:8001
+                    </div>
+                    <div>
+                        <span class="text-terracotta"># Node 2 (Joins Node 1)</span><br>
+                        ./bin/cachenode -node-id node-2 -grpc-addr 127.0.0.1:7002 -http-addr 127.0.0.1:9002 -gossip-addr 127.0.0.1:8002 -seed-nodes 127.0.0.1:8001
+                    </div>
+                    <div>
+                        <span class="text-terracotta"># Node 3 (Joins Node 1)</span><br>
+                        ./bin/cachenode -node-id node-3 -grpc-addr 127.0.0.1:7003 -http-addr 127.0.0.1:9003 -gossip-addr 127.0.0.1:8003 -seed-nodes 127.0.0.1:8001
+                    </div>
+                </div>
+            </section>
+
+            <!-- Step 3: YAML configuration -->
+            <section class="mb-10 border-t border-borderMuted pt-8">
+                <h2 class="font-sans text-base font-bold tracking-tight mb-3 text-charcoal">3. Run with YAML Configuration</h2>
+                <p class="text-lg leading-relaxed text-mutedCharcoal mb-4">
+                    Instead of command line flags, you can configure cache nodes using a YAML configuration file. A template config <code>default.yaml</code> is provided in the <code>config/</code> directory:
+                </p>
+                <div class="bg-[#faf9f6] border border-[#e3e2dc] p-4 rounded-lg font-mono text-xs text-charcoal mb-4 overflow-x-auto">
+<pre># Node configuration
+node_id: "node-1"
+grpc_addr: "127.0.0.1:7001"
+http_addr: "127.0.0.1:9001"
+gossip_addr: "127.0.0.1:8001"
+
+# Seed nodes to join an existing cluster (empty for the seed node)
+seed_nodes: []
+
+# Replication & Ring settings
+replica_count: 3
+virtual_nodes: 150
+sweep_interval: 100ms
+max_load_factor: 0.25
+log_level: info</pre>
+                </div>
+                <p class="text-lg leading-relaxed text-mutedCharcoal mb-4">
+                    To run a node using a configuration file, pass the <code>-config</code> flag:
+                </p>
+                <div class="bg-[#faf9f6] border border-[#e3e2dc] p-4 rounded-lg font-mono text-xs text-charcoal mb-4 overflow-x-auto">
+                    ./bin/cachenode -config ./config/node1.yaml
+                </div>
+            </section>
+
+            <!-- Step 4: Client SDK -->
+            <section class="mb-10 border-t border-borderMuted pt-8">
+                <h2 class="font-sans text-base font-bold tracking-tight mb-3 text-charcoal">4. Client SDK Usage</h2>
+                <p class="text-lg leading-relaxed text-mutedCharcoal mb-4">
+                    The system includes a Go-based client SDK (<code>client</code> package) that automatically handles consistent hashing routing, connection pooling, and L1 caching.
+                </p>
+                <div class="bg-[#faf9f6] border border-[#e3e2dc] p-4 rounded-lg font-mono text-xs text-charcoal mb-4 overflow-x-auto">
+<pre>package main
+
+import (
+    "context"
+    "fmt"
+    "log"
+    "time"
+
+    "github.com/AbhinayAmbati/distributed_cache_system/client"
+)
+
+func main() {
+    // 1. Map cluster nodes to their gRPC addresses
+    nodes := map[string]string{
+        "node-1": "127.0.0.1:7001",
+        "node-2": "127.0.0.1:7002",
+        "node-3": "127.0.0.1:7003",
+    }
+
+    // 2. Instantiate client with functional options (including L1 caching)
+    c, err := client.NewClient(
+        nodes,
+        client.WithDialTimeout(5*time.Second),
+        client.WithRequestTimeout(3*time.Second),
+        client.WithL1Cache(1000, 5*time.Second), // 1000 items capacity, 5s default TTL
+    )
+    if err != nil {
+        log.Fatalf("Failed to start cache client: %v", err)
+    }
+    defer c.Close()
+
+    ctx := context.Background()
+
+    // 3. Set a key in the distributed cluster with a 15-second TTL
+    key := "user:session:100"
+    val := []byte("active-session-payload")
+    if err := c.Set(ctx, key, val, 15*time.Second); err != nil {
+        log.Fatalf("Set failed: %v", err)
+    }
+    fmt.Printf("Successfully set key %q\n", key)
+
+    // 4. Retrieve key (SDK resolves the correct target node automatically)
+    retrievedVal, found, err := c.Get(ctx, key)
+    if err != nil {
+        log.Fatalf("Get failed: %v", err)
+    }
+    if found {
+        fmt.Printf("Retrieved value: %s\n", string(retrievedVal))
+    }
+
+    // 5. Delete key (invalidates local L1 cache automatically)
+    existed, err := c.Delete(ctx, key)
+    if err != nil {
+        log.Fatalf("Delete failed: %v", err)
+    }
+    fmt.Printf("Key existed and deleted: %t\n", existed)
+}</pre>
+                </div>
+            </section>
+
+            <!-- Step 5: Testing -->
+            <section class="mb-10 border-t border-borderMuted pt-8">
+                <h2 class="font-sans text-base font-bold tracking-tight mb-3 text-charcoal">5. Automated Testing & Verification</h2>
+                <p class="text-lg leading-relaxed text-mutedCharcoal mb-4">
+                    Run the unit and integration tests with race detection to verify correctness:
+                </p>
+                <div class="bg-[#faf9f6] border border-[#e3e2dc] p-4 rounded-lg font-mono text-xs text-charcoal mb-4 overflow-x-auto">
+                    go test -v -race ./...
+                </div>
+                <p class="text-lg leading-relaxed text-mutedCharcoal mb-4">
+                    Run local micro-benchmarks to evaluate memory throughput:
+                </p>
+                <div class="bg-[#faf9f6] border border-[#e3e2dc] p-4 rounded-lg font-mono text-xs text-charcoal mb-4 space-y-2 overflow-x-auto">
+                    <div>
+                        <span class="text-terracotta"># Run store engine benchmarks</span><br>
+                        go test -bench="." -benchmem .\internal\store
+                    </div>
+                    <div>
+                        <span class="text-terracotta"># Run client SDK and Zipfian hot key mitigation benchmarks</span><br>
+                        go test -bench="." -benchmem .\client
+                    </div>
+                </div>
+            </section>
+
+            <!-- Step 6: HTTP & Chaos -->
+            <section class="mb-0 border-t border-borderMuted pt-8">
+                <h2 class="font-sans text-base font-bold tracking-tight mb-3 text-charcoal">6. HTTP APIs & Chaos Endpoints</h2>
+                <p class="text-lg leading-relaxed text-mutedCharcoal mb-4">
+                    Each node exposes admin, status, and chaos endpoints on its HTTP port (e.g. <code>:9001</code>).
+                </p>
+                <p class="text-lg leading-relaxed text-mutedCharcoal mb-4">
+                    <strong>Metrics & Diagnostics:</strong>
+                </p>
+                <ul class="list-disc pl-6 text-lg text-mutedCharcoal mb-4 space-y-2">
+                    <li><code>GET /health</code>: Returns node status, ID, and uptime.</li>
+                    <li><code>GET /metrics</code>: Returns live operational stats (hits, misses, set count, expirations).</li>
+                    <li><code>GET /info</code>: Returns node settings, Go version, and shard allocation.</li>
+                </ul>
+
+                <p class="text-lg leading-relaxed text-mutedCharcoal mb-4">
+                    <strong>Chaos Engineering Commands:</strong>
+                </p>
+                <div class="bg-[#faf9f6] border border-[#e3e2dc] p-4 rounded-lg font-mono text-xs text-charcoal mb-0 space-y-3 overflow-x-auto">
+                    <div>
+                        <span class="text-terracotta"># Simulate Crash (drop all gRPC and SWIM UDP requests)</span><br>
+                        curl -X POST http://localhost:9001/chaos/fail-node -d '{"failed": true}'
+                    </div>
+                    <div>
+                        <span class="text-terracotta"># Inject Network Latency (e.g., 500ms delay on all ops)</span><br>
+                        curl -X POST http://localhost:9001/chaos/slow-node -d '{"latency_ms": 500}'
+                    </div>
+                    <div>
+                        <span class="text-terracotta"># Simulate Network Partition (block communication to Node 2)</span><br>
+                        curl -X POST http://localhost:9001/chaos/partition -d '{"peer_id": "node-2", "partition": true}'
+                    </div>
+                    <div>
+                        <span class="text-terracotta"># Clear Faults (restore normal operation)</span><br>
+                        curl -X POST http://localhost:9001/chaos/recover
+                    </div>
+                    <div>
+                        <span class="text-terracotta"># Get Fault Status (check active fault injections)</span><br>
+                        curl http://localhost:9001/chaos/status
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Unified Footer -->
+        <footer class="border-t border-borderMuted pt-6 pb-2 mt-16 font-sans text-xs text-mutedCharcoal">
+            <div class="flex flex-col md:flex-row items-center justify-between gap-2">
+                <p>Distributed Cache - Open Source &bull; Built with Go &bull; Apache 2.0 License</p>
+                <a href="https://github.com/AbhinayAmbati/distributed_cache_system" target="_blank" class="hover:text-terracotta transition flex items-center gap-1">
+                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                    GitHub
+                </a>
+            </div>
+        </footer>
+    </div>
+</body>
+</html>
