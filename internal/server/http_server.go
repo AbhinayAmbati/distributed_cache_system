@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/AbhinayAmbati/distributed_cache_system/internal/hashing"
 	"github.com/AbhinayAmbati/distributed_cache_system/internal/store"
 )
 
@@ -14,16 +15,18 @@ import (
 type HTTPServer struct {
 	nodeID    string
 	store     *store.Store
+	ring      *hashing.Ring
 	startTime time.Time
 	server    *http.Server
 	mux       *http.ServeMux
 }
 
 // NewHTTPServer creates a new HTTP admin server.
-func NewHTTPServer(nodeID string, s *store.Store) *HTTPServer {
+func NewHTTPServer(nodeID string, s *store.Store, r *hashing.Ring) *HTTPServer {
 	h := &HTTPServer{
 		nodeID:    nodeID,
 		store:     s,
+		ring:      r,
 		startTime: time.Now(),
 		mux:       http.NewServeMux(),
 	}
@@ -139,12 +142,13 @@ func (h *HTTPServer) handleMetrics(w http.ResponseWriter, r *http.Request) {
 
 // infoResponse is the JSON structure for /info.
 type infoResponse struct {
-	NodeID       string `json:"node_id"`
-	Version      string `json:"version"`
-	GoVersion    string `json:"go_version"`
-	ShardCount   int    `json:"shard_count"`
-	KeysCount    int    `json:"keys_count"`
-	UptimeMs     int64  `json:"uptime_ms"`
+	NodeID       string   `json:"node_id"`
+	Version      string   `json:"version"`
+	GoVersion    string   `json:"go_version"`
+	ShardCount   int      `json:"shard_count"`
+	KeysCount    int      `json:"keys_count"`
+	UptimeMs     int64    `json:"uptime_ms"`
+	RingMembers  []string `json:"ring_members"`
 }
 
 // handleInfo returns node information.
@@ -154,13 +158,19 @@ func (h *HTTPServer) handleInfo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var members []string
+	if h.ring != nil {
+		members = h.ring.Members()
+	}
+
 	resp := infoResponse{
-		NodeID:     h.nodeID,
-		Version:    "0.1.0",
-		GoVersion:  "go1.22",
-		ShardCount: 256,
-		KeysCount:  h.store.Len(),
-		UptimeMs:   time.Since(h.startTime).Milliseconds(),
+		NodeID:      h.nodeID,
+		Version:     "0.1.0",
+		GoVersion:   "go1.22",
+		ShardCount:  256,
+		KeysCount:   h.store.Len(),
+		UptimeMs:    time.Since(h.startTime).Milliseconds(),
+		RingMembers: members,
 	}
 
 	writeJSON(w, http.StatusOK, resp)

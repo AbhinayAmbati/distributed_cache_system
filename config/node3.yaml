@@ -1,0 +1,15 @@
+# Configuration for Node 3
+node_id: "node-3"
+grpc_addr: "127.0.0.1:7003"
+http_addr: "127.0.0.1:9003"
+gossip_addr: "127.0.0.1:8003"
+
+# Seed nodes to join an existing cluster
+seed_nodes:
+  - "127.0.0.1:8001"
+
+replica_count: 3
+virtual_nodes: 150
+sweep_interval: 100ms
+max_load_factor: 0.25
+log_level: info

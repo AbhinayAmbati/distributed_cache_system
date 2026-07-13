@@ -1,0 +1,14 @@
+# Configuration for Node 1 (Seed Node)
+node_id: "node-1"
+grpc_addr: "127.0.0.1:7001"
+http_addr: "127.0.0.1:9001"
+gossip_addr: "127.0.0.1:8001"
+
+# Seed nodes to join an existing cluster (empty for the seed node)
+seed_nodes: []
+
+replica_count: 3
+virtual_nodes: 150
+sweep_interval: 100ms
+max_load_factor: 0.25
+log_level: info
