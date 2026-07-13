@@ -66,7 +66,7 @@
                     This project is structured as a collection of independent, peer-to-peer cache nodes that self-organize into a cluster. The architecture ensures there is no single point of failure (SPOF) and no centralized coordination bottleneck.
                 </p>
                 <div class="border border-borderMuted rounded-xl p-2 bg-warmCard mb-3">
-                    <img src="../diagrams/cache_architecture.png" alt="Overall Cache Architecture" class="w-full h-auto rounded-lg bg-white">
+                    <img src="diagrams/cache_architecture.png" alt="Overall Cache Architecture" class="w-full h-auto rounded-lg bg-white">
                 </div>
                 <p class="font-sans text-xs text-mutedCharcoal italic mb-6">Figure 1: High-level peer-to-peer topology showing Client Routing, gRPC operations, and Gossip synchronization channels.</p>
             </section>
@@ -75,7 +75,7 @@
             <section class="mb-14 border-t border-borderMuted pt-10">
                 <h2 class="font-sans text-lg font-bold tracking-tight mb-4 text-charcoal">1. The Storage Engine & TTL Sweeper</h2>
                 <div class="border border-borderMuted rounded-xl p-2 bg-warmCard mb-4">
-                    <img src="../diagrams/storage_engine.png" alt="Storage Engine Lock Sharding" class="w-full h-auto rounded-lg bg-white">
+                    <img src="diagrams/storage_engine.png" alt="Storage Engine Lock Sharding" class="w-full h-auto rounded-lg bg-white">
                 </div>
                 <p class="font-sans text-xs text-mutedCharcoal italic mb-6">Figure 2: Lock sharding structure mapping keys to individual RWMutex storage buckets.</p>
                 
@@ -108,7 +108,7 @@
             <section class="mb-14 border-t border-borderMuted pt-10">
                 <h2 class="font-sans text-lg font-bold tracking-tight mb-4 text-charcoal">2. Consistent Hashing with Bounded Loads</h2>
                 <div class="border border-borderMuted rounded-xl p-2 bg-warmCard mb-4">
-                    <img src="../diagrams/hash_ring.png" alt="Consistent Hashing Ring" class="w-full h-auto rounded-lg bg-white">
+                    <img src="diagrams/hash_ring.png" alt="Consistent Hashing Ring" class="w-full h-auto rounded-lg bg-white">
                 </div>
                 <p class="font-sans text-xs text-mutedCharcoal italic mb-6">Figure 3: Virtual node assignment clockwise on the consistent hashing ring.</p>
                 
@@ -138,7 +138,7 @@
             <section class="mb-14 border-t border-borderMuted pt-10">
                 <h2 class="font-sans text-lg font-bold tracking-tight mb-4 text-charcoal">3. The SWIM Gossip Protocol & Cluster Membership</h2>
                 <div class="border border-borderMuted rounded-xl p-2 bg-warmCard mb-4">
-                    <img src="../diagrams/swim_ping_protocol.png" alt="SWIM Ping Protocol" class="w-full h-auto rounded-lg bg-white">
+                    <img src="diagrams/swim_ping_protocol.png" alt="SWIM Ping Protocol" class="w-full h-auto rounded-lg bg-white">
                 </div>
                 <p class="font-sans text-xs text-mutedCharcoal italic mb-6">Figure 4: Direct and indirect UDP ping flow.</p>
                 
@@ -189,7 +189,7 @@
             <section class="mb-14 border-t border-borderMuted pt-10">
                 <h2 class="font-sans text-lg font-bold tracking-tight mb-4 text-charcoal">5. Probabilistic Hot Key Detection & Mitigation</h2>
                 <div class="border border-borderMuted rounded-xl p-2 bg-warmCard mb-4">
-                    <img src="../diagrams/count_min_sketch.png" alt="Count-Min Sketch Grid" class="w-full h-auto rounded-lg bg-white">
+                    <img src="diagrams/count_min_sketch.png" alt="Count-Min Sketch Grid" class="w-full h-auto rounded-lg bg-white">
                 </div>
                 <p class="font-sans text-xs text-mutedCharcoal italic mb-6">Figure 5: Fixed-size multi-hashing layout of the Count-Min Sketch frequency detector.</p>
                 
@@ -227,7 +227,7 @@
                 <div class="mb-10">
                     <h3 class="font-sans text-base font-semibold text-charcoal mb-3">Write (SET) Operation Flow</h3>
                     <div class="border border-borderMuted rounded-xl p-2 bg-warmCard mb-4">
-                        <img src="../diagrams/set_operation_sequence.png" alt="SET Operation Sequence" class="w-full h-auto rounded-lg bg-white">
+                        <img src="diagrams/set_operation_sequence.png" alt="SET Operation Sequence" class="w-full h-auto rounded-lg bg-white">
                     </div>
                     <p class="font-sans text-xs text-mutedCharcoal italic mb-4">Figure 6a: Client SET replica-propagation sequence.</p>
                     <h4 class="font-sans text-sm font-semibold uppercase text-terracotta mb-2">Sequence Steps:</h4>
@@ -244,7 +244,7 @@
                 <div class="mb-10 border-t border-borderMuted pt-8">
                     <h3 class="font-sans text-base font-semibold text-charcoal mb-3">Read (GET) Operation Flow</h3>
                     <div class="border border-borderMuted rounded-xl p-2 bg-warmCard mb-4">
-                        <img src="../diagrams/get_flow.png" alt="GET Operation Flow" class="w-full h-auto rounded-lg bg-white">
+                        <img src="diagrams/get_flow.png" alt="GET Operation Flow" class="w-full h-auto rounded-lg bg-white">
                     </div>
                     <p class="font-sans text-xs text-mutedCharcoal italic mb-4">Figure 6b: Client GET routing sequence (L1 check, local lookup, proxy routing).</p>
                     <h4 class="font-sans text-sm font-semibold uppercase text-terracotta mb-2">Sequence Steps:</h4>
@@ -263,7 +263,7 @@
                 <div class="mb-0 border-t border-borderMuted pt-8">
                     <h3 class="font-sans text-base font-semibold text-charcoal mb-3">SWIM Failure Detection & Self-Healing Flow</h3>
                     <div class="border border-borderMuted rounded-xl p-2 bg-warmCard mb-4">
-                        <img src="../diagrams/swim_flow.png" alt="SWIM Failure Detection Flow" class="w-full h-auto rounded-lg bg-white">
+                        <img src="diagrams/swim_flow.png" alt="SWIM Failure Detection Flow" class="w-full h-auto rounded-lg bg-white">
                     </div>
                     <p class="font-sans text-xs text-mutedCharcoal italic mb-4">Figure 6c: Gossip state transition sequence (Alive, Suspect, Dead).</p>
                     <h4 class="font-sans text-sm font-semibold uppercase text-terracotta mb-2">Sequence Steps:</h4>

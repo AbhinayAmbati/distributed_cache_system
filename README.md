@@ -10,7 +10,7 @@ This project is structured as a collection of independent, peer-to-peer cache no
 
 Below is the high-level architecture diagram showing how the components fit together:
 
-![System Architecture](diagrams/cache_architecture.png)
+![System Architecture](web/diagrams/cache_architecture.png)
 
 ### Core Components Interactions
 1. **Client Space**: The client SDK acts as a smart router. It holds a local view of the consistent hash ring. When making a request, it hashes the key to find the responsible primary node and routes the query directly via gRPC. It also implements a local **L1 LRU cache** to intercept requests to keys flagged as "hot" by the cluster.
@@ -28,7 +28,7 @@ Below is the high-level architecture diagram showing how the components fit toge
 
 ### 1. The Storage Engine & TTL Sweeper
 
-![Storage Engine & TTL Sweeper](diagrams/storage_engine.png)
+![Storage Engine & TTL Sweeper](web/diagrams/storage_engine.png)
 
 #### Internal Sharding
 To prevent Global Lock Contention, the store partitions the keyspace into **256 distinct shards**.
@@ -51,7 +51,7 @@ Stale memory reclamation is performed via a hybrid lazy-and-active scheme:
 
 Consistent hashing distributes keys across a dynamic number of physical servers while minimizing data migration when nodes join or leave.
 
-![Consistent Hash Ring](diagrams/hash_ring.png)
+![Consistent Hash Ring](web/diagrams/hash_ring.png)
 
 #### Virtual Nodes (VNodes)
 To prevent statistical imbalance (skewed load on specific nodes), each physical node is mapped to **150 virtual nodes** (VNodes) distributed randomly on the ring.
@@ -73,7 +73,7 @@ Standard consistent hashing can lead to hot-spotting if a single key or hash ran
 
 For decentralized, coordinate-free cluster management, the system implements the **SWIM (Scalable Weakly-consistent Infection-style Process Group Membership Protocol)**.
 
-![SWIM Ping-Ack & Ping-Req Protocol](diagrams/swim_ping_protocol.png)
+![SWIM Ping-Ack & Ping-Req Protocol](web/diagrams/swim_ping_protocol.png)
 
 #### Failure Detection Cycle
 Every node runs a periodic failure detection loop (default 500ms):
@@ -114,7 +114,7 @@ When the SWIM protocol detects that a node is `DEAD` and removes it from the rin
 
 To prevent cluster instability under extreme read traffic targeting a single key (the "Slashdot effect"), the system employs real-time mitigation.
 
-![Count-Min Sketch](diagrams/count_min_sketch.png)
+![Count-Min Sketch](web/diagrams/count_min_sketch.png)
 
 #### Count-Min Sketch (CMS) Detector
 On every `Get` request, the server records the key access in a Count-Min Sketch:
@@ -149,7 +149,7 @@ The diagrams below demonstrate how components communicate during read, write, an
 
 The sequence diagram below displays the path of a `SET` request from the client SDK to the cluster:
 
-![Set Operation Sequence](diagrams/set_operation_sequence.png)
+![Set Operation Sequence](web/diagrams/set_operation_sequence.png)
 
 #### Sequence Steps
 1. **L1 Invalidation**: The Client SDK checks if the key exists in its local L1 cache. If present, it deletes the entry to prevent stale reads.
@@ -165,7 +165,7 @@ The sequence diagram below displays the path of a `SET` request from the client 
 
 ### 2. Read (`GET`) Operation Flow
 
-![Read Operation Flow](diagrams/get_flow.png)
+![Read Operation Flow](web/diagrams/get_flow.png)
 
 #### Sequence Steps
 1. **L1 Check**: The client checks its L1 LRU Cache. On a hit, the value is returned immediately.
@@ -182,7 +182,7 @@ The sequence diagram below displays the path of a `SET` request from the client 
 
 ### 3. SWIM Failure Detection & Self-Healing Flow
 
-![SWIM Failure Detection & Self-Healing Flow](diagrams/swim_flow.png)
+![SWIM Failure Detection & Self-Healing Flow](web/diagrams/swim_flow.png)
 
 #### Sequence Steps
 1. **UDP Ping**: Node A selects Node B and sends a `MsgPing`. Node B is dead or partitioned and does not reply.
