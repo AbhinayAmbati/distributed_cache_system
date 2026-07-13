@@ -218,6 +218,100 @@ To test consistent hashing, SWIM gossip, and replication, launch three terminals
 ./bin/cachenode -node-id node-3 -grpc-addr :7003 -http-addr :9003
 ```
 
+### 3. Run with YAML Configuration
+Instead of using command line flags, you can configure cache nodes using a YAML configuration file. A template config `default.yaml` is provided in the `config/` directory:
+
+```yaml
+# Node configuration
+node_id: "node-1"
+grpc_addr: ":7001"
+http_addr: ":9001"
+gossip_addr: ":8001"
+
+# Seed nodes to join an existing cluster (empty for the seed node)
+seed_nodes: []
+
+# Replication & Ring settings
+replica_count: 3
+virtual_nodes: 150
+sweep_interval: 100ms
+max_load_factor: 0.25
+log_level: info
+```
+
+To run a node using a configuration file, pass the `-config` flag:
+```bash
+./bin/cachenode -config ./config/default.yaml
+```
+
+---
+
+## Client SDK Usage
+
+The system includes a Go-based client SDK (`client` package) that automatically handles consistent hashing routing, connection pooling, and L1 caching.
+
+Here is an example showing how to initialize and use the client SDK:
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"time"
+
+	"github.com/AbhinayAmbati/distributed_cache_system/client"
+)
+
+func main() {
+	// 1. Map cluster nodes to their gRPC addresses
+	nodes := map[string]string{
+		"node-1": "localhost:7001",
+		"node-2": "localhost:7002",
+		"node-3": "localhost:7003",
+	}
+
+	// 2. Instantiate client with functional options (including L1 caching)
+	c, err := client.NewClient(
+		nodes,
+		client.WithDialTimeout(5*time.Second),
+		client.WithRequestTimeout(3*time.Second),
+		client.WithL1Cache(1000, 5*time.Second), // 1000 items capacity, 5s default TTL
+	)
+	if err != nil {
+		log.Fatalf("Failed to start cache client: %v", err)
+	}
+	defer c.Close()
+
+	ctx := context.Background()
+
+	// 3. Set a key in the distributed cluster with a 15-second TTL
+	key := "user:session:100"
+	val := []byte("active-session-payload")
+	if err := c.Set(ctx, key, val, 15*time.Second); err != nil {
+		log.Fatalf("Set failed: %v", err)
+	}
+	fmt.Printf("Successfully set key %q\n", key)
+
+	// 4. Retrieve key (SDK resolves the correct target node automatically)
+	retrievedVal, found, err := c.Get(ctx, key)
+	if err != nil {
+		log.Fatalf("Get failed: %v", err)
+	}
+	if found {
+		fmt.Printf("Retrieved value: %s\n", string(retrievedVal))
+	}
+
+	// 5. Delete key (invalidates local L1 cache automatically)
+	existed, err := c.Delete(ctx, key)
+	if err != nil {
+		log.Fatalf("Delete failed: %v", err)
+	}
+	fmt.Printf("Key existed and deleted: %t\n", existed)
+}
+```
+
 ---
 
 ## Testing and Verification
